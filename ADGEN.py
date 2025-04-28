@@ -1,3 +1,4 @@
+uv install elevenlabs
 import streamlit as st
 from elevenlabs import ElevenLabs
 
