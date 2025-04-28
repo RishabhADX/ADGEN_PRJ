@@ -455,12 +455,12 @@ def render_video_generation_page():
             with col1:
                 if current_page > 0 and st.button("Previous", use_container_width=True):
                     st.session_state.page = current_page - 1
-                    st.experimental_rerun()
+                    st.rerun()
 
             with col2:
                 if current_page < total_pages - 1 and st.button("Next", use_container_width=True):
                     st.session_state.page = current_page + 1
-                    st.experimental_rerun()
+                    st.rerun()
 
             # Video generation form
             st.subheader("Generate Video")
