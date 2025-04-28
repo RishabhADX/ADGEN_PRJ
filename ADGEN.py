@@ -1,4 +1,3 @@
-!pip install elevenlabs
 from elevenlabs import ElevenLabs
 
 # Initialize the ElevenLabs client
