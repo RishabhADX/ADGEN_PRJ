@@ -435,9 +435,14 @@ def render_video_generation_page():
             for i, (index, row) in enumerate(replicas_to_display.iterrows()):
                 with cols[i % 3]:
                     st.markdown(f"### {row['replica_name']}")
-                    # Initially show image instead of video
-                    st.image(row['thumbnail_image_url'], caption=f"Thumbnail of {row['replica_name']}")
                     
+                    # If there is a video thumbnail, show it; otherwise, show a placeholder
+                    if 'thumbnail_video_url' in row and row['thumbnail_video_url']:
+                        st.video(row['thumbnail_video_url'])
+                    else:
+                        # Fallback to a placeholder if there's no video thumbnail
+                        st.image("https://via.placeholder.com/150", caption=f"Thumbnail of {row['replica_name']}")
+
                     if st.button(f"Select {row['replica_name']}", key=f"replica_{row['replica_id']}"):
                         st.session_state.selected_replica = {
                             'id': row['replica_id'],
@@ -529,6 +534,7 @@ def render_video_generation_page():
         if st.button("Generate Images", use_container_width=True):
             st.session_state.step = "image_generation"
             st.rerun()
+            
 def render_image_generation_page():
     st.title("🖼️ Image Generation")
     st.subheader("Create AI-generated images for your ad campaign")
