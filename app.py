@@ -299,23 +299,121 @@ def render_audio_generation_page():
     st.markdown("### Current Script")
     st.info(st.session_state.script)
     
-    # ElevenLabs voice selection (integrated from second snippet)
+    # ElevenLabs voice selection
     st.subheader("Select Voice from ElevenLabs")
     
     # Fetch voices if not already in session state
     if 'elevenlabs_voices' not in st.session_state:
         with st.spinner("Loading ElevenLabs voices..."):
             st.session_state.elevenlabs_voices = get_elevenlabs_voices()
+            # Initialize voice filtering and pagination variables
+            st.session_state.current_page = 0
+            st.session_state.voice_search = ""
+            st.session_state.voice_gender_filter = "All"
+            st.session_state.voice_accent_filter = "All"
+            st.session_state.voice_age_filter = "All"
     
-    # Display voices in a grid
+    # Display voice search and filter options
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        voice_search = st.text_input("Search by name", value=st.session_state.voice_search)
+        if voice_search != st.session_state.voice_search:
+            st.session_state.voice_search = voice_search
+            st.session_state.current_page = 0
+    
+    with col2:
+        # Get unique gender values
+        if st.session_state.elevenlabs_voices:
+            gender_options = ["All"] + list(set(voice.labels.get("gender", "Unknown") 
+                                              for voice in st.session_state.elevenlabs_voices))
+            gender_filter = st.selectbox("Gender", gender_options, index=gender_options.index(st.session_state.voice_gender_filter))
+            if gender_filter != st.session_state.voice_gender_filter:
+                st.session_state.voice_gender_filter = gender_filter
+                st.session_state.current_page = 0
+    
+    with col3:
+        # Get unique accent values
+        if st.session_state.elevenlabs_voices:
+            accent_options = ["All"] + list(set(voice.labels.get("accent", "Unknown") 
+                                              for voice in st.session_state.elevenlabs_voices))
+            accent_filter = st.selectbox("Accent", accent_options, index=accent_options.index(st.session_state.voice_accent_filter))
+            if accent_filter != st.session_state.voice_accent_filter:
+                st.session_state.voice_accent_filter = accent_filter
+                st.session_state.current_page = 0
+    
+    with col4:
+        # Get unique age values
+        if st.session_state.elevenlabs_voices:
+            age_options = ["All"] + list(set(voice.labels.get("age", "Unknown") 
+                                           for voice in st.session_state.elevenlabs_voices))
+            age_filter = st.selectbox("Age", age_options, index=age_options.index(st.session_state.voice_age_filter))
+            if age_filter != st.session_state.voice_age_filter:
+                st.session_state.voice_age_filter = age_filter
+                st.session_state.current_page = 0
+    
+    # Filter voices based on search and filters
+    filtered_voices = []
     if st.session_state.elevenlabs_voices:
-        cards_per_row = 3
+        for voice in st.session_state.elevenlabs_voices:
+            # Apply name search
+            if st.session_state.voice_search and st.session_state.voice_search.lower() not in voice.name.lower():
+                continue
+            
+            # Apply gender filter
+            if st.session_state.voice_gender_filter != "All" and voice.labels.get("gender", "Unknown") != st.session_state.voice_gender_filter:
+                continue
+                
+            # Apply accent filter
+            if st.session_state.voice_accent_filter != "All" and voice.labels.get("accent", "Unknown") != st.session_state.voice_accent_filter:
+                continue
+                
+            # Apply age filter
+            if st.session_state.voice_age_filter != "All" and voice.labels.get("age", "Unknown") != st.session_state.voice_age_filter:
+                continue
+            
+            filtered_voices.append(voice)
+    
+    # Display voices with pagination
+    if filtered_voices:
+        voices_per_page = 6  # Show 6 voices per page (2 rows of 3)
+        total_pages = (len(filtered_voices) - 1) // voices_per_page + 1
         
-        for i in range(0, len(st.session_state.elevenlabs_voices), cards_per_row):
-            cols = st.columns(cards_per_row)
-            for j, col in enumerate(cols):
-                if i + j < len(st.session_state.elevenlabs_voices):
-                    voice = st.session_state.elevenlabs_voices[i + j]
+        # Pagination controls
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown(f"### Page {st.session_state.current_page + 1} of {total_pages}")
+            prev_col, page_col, next_col = st.columns([1, 1, 1])
+            with prev_col:
+                if st.button("← Previous", disabled=st.session_state.current_page == 0):
+                    st.session_state.current_page -= 1
+                    st.rerun()
+            
+            with page_col:
+                page_options = [f"Page {i+1}" for i in range(total_pages)]
+                selected_page = st.selectbox("Go to page", page_options, index=st.session_state.current_page)
+                selected_page_index = page_options.index(selected_page)
+                if selected_page_index != st.session_state.current_page:
+                    st.session_state.current_page = selected_page_index
+                    st.rerun()
+            
+            with next_col:
+                if st.button("Next →", disabled=st.session_state.current_page >= total_pages - 1):
+                    st.session_state.current_page += 1
+                    st.rerun()
+        
+        # Display current page voices
+        start_idx = st.session_state.current_page * voices_per_page
+        end_idx = min(start_idx + voices_per_page, len(filtered_voices))
+        current_page_voices = filtered_voices[start_idx:end_idx]
+        
+        # Display voices in grid
+        rows = (len(current_page_voices) + 2) // 3  # Calculate rows needed
+        for row in range(rows):
+            cols = st.columns(3)
+            for col_idx in range(3):
+                voice_idx = row * 3 + col_idx
+                if voice_idx < len(current_page_voices):
+                    voice = current_page_voices[voice_idx]
                     name = voice.name
                     accent = voice.labels.get("accent", "Unknown")
                     gender = voice.labels.get("gender", "Unknown")
@@ -324,10 +422,10 @@ def render_audio_generation_page():
                     preview_url = voice.preview_url
                     voice_id = voice.voice_id
                     
-                    with col:
+                    with cols[col_idx]:
                         st.markdown(f"**{name}**")
                         st.markdown(
-                            f"Accent: {accent} | Gender: {gender} | Age: {age} | Use Case: {use_case}"
+                            f"Accent: {accent} | Gender: {gender} | Age: {age}"
                         )
                         # Preview the voice
                         st.audio(preview_url)
@@ -336,8 +434,13 @@ def render_audio_generation_page():
                             st.session_state.selected_voice_id = voice_id
                             st.session_state.selected_voice_name = name
                             st.success(f"Selected voice: {name}")
+        
+        st.markdown(f"Showing {start_idx + 1}-{end_idx} of {len(filtered_voices)} voices")
     else:
-        st.error("Could not load ElevenLabs voices. Please check your API key or try again later.")
+        if st.session_state.voice_search or st.session_state.voice_gender_filter != "All" or st.session_state.voice_accent_filter != "All" or st.session_state.voice_age_filter != "All":
+            st.warning("No voices match your search criteria. Try adjusting your filters.")
+        else:
+            st.error("Could not load ElevenLabs voices. Please check your API key or try again later.")
     
     # Generation options
     st.subheader("Generate Audio")
