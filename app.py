@@ -417,10 +417,14 @@ def render_video_generation_page():
         if not st.session_state.replicas_df.empty:
             st.subheader("Select Tavus Replica")
             
+            # Initialize the page index if it doesn't exist
+            if 'page' not in st.session_state:
+                st.session_state.page = 0
+
             # Paginate and display replicas in chunks
             items_per_page = 6  # Set the number of replicas per page
             total_pages = len(st.session_state.replicas_df) // items_per_page + (1 if len(st.session_state.replicas_df) % items_per_page != 0 else 0)
-            current_page = st.session_state.get('page', 0)
+            current_page = st.session_state.page
 
             # Display replicas for the current page
             start_idx = current_page * items_per_page
