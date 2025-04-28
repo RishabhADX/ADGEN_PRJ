@@ -417,19 +417,42 @@ def render_video_generation_page():
         if not st.session_state.replicas_df.empty:
             st.subheader("Select Tavus Replica")
             
-            # Grid of replicas with thumbnails
+            # Paginate and display replicas in chunks
+            items_per_page = 6  # Set the number of replicas per page
+            total_pages = len(st.session_state.replicas_df) // items_per_page + (1 if len(st.session_state.replicas_df) % items_per_page != 0 else 0)
+            current_page = st.session_state.get('page', 0)
+
+            # Display replicas for the current page
+            start_idx = current_page * items_per_page
+            end_idx = start_idx + items_per_page
+            replicas_to_display = st.session_state.replicas_df.iloc[start_idx:end_idx]
+
             cols = st.columns(3)
-            for i, (index, row) in enumerate(st.session_state.replicas_df.iterrows()):
+            for i, (index, row) in enumerate(replicas_to_display.iterrows()):
                 with cols[i % 3]:
                     st.markdown(f"### {row['replica_name']}")
-                    st.video(row['thumbnail_video_url'])
+                    # Initially show image instead of video
+                    st.image(row['thumbnail_image_url'], caption=f"Thumbnail of {row['replica_name']}")
+                    
                     if st.button(f"Select {row['replica_name']}", key=f"replica_{row['replica_id']}"):
                         st.session_state.selected_replica = {
                             'id': row['replica_id'],
                             'name': row['replica_name']
                         }
                         st.success(f"Selected replica: {row['replica_name']}")
-            
+
+            # Pagination Controls
+            col1, col2 = st.columns(2)
+            with col1:
+                if current_page > 0 and st.button("Previous", use_container_width=True):
+                    st.session_state.page = current_page - 1
+                    st.experimental_rerun()
+
+            with col2:
+                if current_page < total_pages - 1 and st.button("Next", use_container_width=True):
+                    st.session_state.page = current_page + 1
+                    st.experimental_rerun()
+
             # Video generation form
             st.subheader("Generate Video")
             
@@ -502,7 +525,6 @@ def render_video_generation_page():
         if st.button("Generate Images", use_container_width=True):
             st.session_state.step = "image_generation"
             st.rerun()
-
 def render_image_generation_page():
     st.title("🖼️ Image Generation")
     st.subheader("Create AI-generated images for your ad campaign")
