@@ -628,4 +628,4 @@ elif st.session_state.step == "image_generation":
 
 # Add footer
 st.markdown("---")
-st.markdown("#### AdGen AI Platform | Powered by CrewAI, Tavus, ElevenLabs, and Gemini")
+st.markdown("#### AdGen AI Platform v0 | Beta Testing")
