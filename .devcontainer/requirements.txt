@@ -1,2 +1,2 @@
-pandas
-elevenlabs
+elevenlabs==0.1.0
+
