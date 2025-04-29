@@ -63,17 +63,20 @@ st.markdown(f"""
         margin-bottom: 10px;
         color: {TEXT_COLOR};
     }}
-    .play-button {{
-        background-color: {PRIMARY_COLOR};
-        color: white;
-        border-radius: 50%;
-        width: 36px;
-        height: 36px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        margin: 10px auto;
+    .bubble {{
+        display: inline-block;
+        background-color: {SECONDARY_COLOR};
+        color: {TEXT_COLOR};
+        border-radius: 16px;
+        padding: 4px 12px;
+        margin-right: 8px;
+        margin-bottom: 8px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }}
+    .audio-preview {{
+        width: 100%;
+        margin: 10px 0;
     }}
     .pagination {{
         display: flex;
@@ -420,21 +423,21 @@ def render_audio_generator():
             st.markdown(f"""
             <div class="{card_class}">
                 <div class="card-title">{voice["name"]}</div>
-                <p><strong>Gender:</strong> {voice["gender"]}</p>
-                <p><strong>Style:</strong> {voice["style"]}</p>
-                <p><strong>Language:</strong> {voice["language"]}</p>
-                <div class="play-button">▶</div>
+                <div>
+                    <span class="bubble">{voice["gender"]}</span>
+                    <span class="bubble">{voice["style"]}</span>
+                    <span class="bubble">{voice["language"]}</span>
+                </div>
             </div>
             """, unsafe_allow_html=True)
             
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                if st.button("Play Sample", key=f"play_{voice['id']}"):
-                    play_audio_sample(voice["id"])
-            with col2:
-                if st.button("Select" if not is_selected else "Selected", key=f"select_{voice['id']}"):
-                    select_voice(voice["id"])
-                    st.experimental_rerun()
+            # Audio preview
+            st.audio(f"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3", format="audio/mp3")
+            
+            # Select button
+            if st.button("Select" if not is_selected else "Selected", key=f"select_{voice['id']}"):
+                select_voice(voice["id"])
+                st.experimental_rerun()
     
     # Pagination controls
     st.markdown("<div class='pagination'>", unsafe_allow_html=True)
@@ -515,16 +518,26 @@ def render_video_generator():
             is_selected = st.session_state.selected_video_style == style["id"]
             card_class = "card card-selected" if is_selected else "card"
             
-            # Create placeholder preview image
-            placeholder = get_placeholder_image(300, 200, f"Style {style['id']}")
+            # Extract characteristic tags from description
+            characteristics = [
+                f"Cinematic", 
+                f"HD Quality", 
+                f"{['Modern', 'Vintage', 'Futuristic'][i % 3]}"
+            ]
             
             st.markdown(f"""
             <div class="{card_class}">
                 <div class="card-title">{style["name"]}</div>
-                <p>{style["description"]}</p>
+                <div>
+                    <span class="bubble">{characteristics[0]}</span>
+                    <span class="bubble">{characteristics[1]}</span>
+                    <span class="bubble">{characteristics[2]}</span>
+                </div>
             </div>
             """, unsafe_allow_html=True)
             
+            # Create placeholder preview image
+            placeholder = get_placeholder_image(300, 200, f"Style {style['id']}")
             st.image(placeholder, use_column_width=True)
             
             if st.button("Select" if not is_selected else "Selected", key=f"select_video_{style['id']}"):
