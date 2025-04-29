@@ -414,39 +414,37 @@ def render_audio_generator():
     
     # Display voice cards in a grid
     cols = st.columns(3)
-    for i, voice in enumerate(voices):
-        with cols[i % 3]:
-            # Check if this voice is selected
-            is_selected = st.session_state.selected_voice == voice["id"]
-            
-            # Create a clickable card with selection indicator
-            card_id = f"voice_card_{voice['id']}"
-            
-            # Generate HTML for the card with a selection indicator in the top-right corner
-            card_html = f"""
-            <div id="{card_id}" class="voice-card {'selected' if is_selected else ''}" 
-                 onclick="selectVoice('{voice['id']}')">
-                <div class="card-header">
-                    <div class="card-title">{voice["name"]}</div>
-                    <div class="selection-indicator">{'✓' if is_selected else ''}</div>
-                </div>
-                <div class="card-tags">
-                    <span class="bubble">{voice["gender"]}</span>
-                    <span class="bubble">{voice["style"]}</span>
-                    <span class="bubble">{voice["language"]}</span>
-                </div>
-                <audio controls style="width: 100%; margin-bottom: 10px;">
-                    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
-                    Your browser does not support the audio element.
-                </audio>
-                if st.button("hello", key=f"hidden_btn_{voice['id']}"):
-                select_voice(voice["id"])
-                st.rerun()
+
+for i, voice in enumerate(voices):
+    with cols[i % 3]:
+        is_selected = st.session_state.selected_voice == voice["id"]
+        card_id = f"voice_card_{voice['id']}"
+
+        # Create the card
+        card_html = f"""
+        <div class="voice-card {'selected' if is_selected else ''}">
+            <div class="card-header">
+                <div class="card-title">{voice["name"]}</div>
+                <div class="selection-indicator">{'✓' if is_selected else ''}</div>
             </div>
-            """
-            
-            # Place a hidden button that will be triggered by the JavaScript click
-            
+            <div class="card-tags">
+                <span class="bubble">{voice["gender"]}</span>
+                <span class="bubble">{voice["style"]}</span>
+                <span class="bubble">{voice["language"]}</span>
+            </div>
+            <audio controls style="width: 100%; margin-bottom: 10px;">
+                <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
+                Your browser does not support the audio element.
+            </audio>
+        </div>
+        """
+
+        st.markdown(card_html, unsafe_allow_html=True)
+
+        # Button to select this voice
+        if st.button(f"Select {voice['name']}", key=f"select_btn_{voice['id']}"):
+            st.session_state.selected_voice = voice["id"]
+            st.rerun()            
             
             # Display the HTML card
             st.markdown(card_html, unsafe_allow_html=True)
