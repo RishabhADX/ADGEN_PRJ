@@ -418,17 +418,17 @@ def render_audio_generator():
     for i, voice in enumerate(voices):
         with cols[i % 3]:
             is_selected = st.session_state.selected_voice == voice["id"]
+            card_id = f"voice_card_{voice['id']}"
+            btn_id = f"select_btn_{voice['id']}"
     
-            # Card HTML with placeholder for button container
+            # Create the card with a positioned tick-box
             card_html = f"""
-            <div class="voice-card {'selected' if is_selected else ''}">
+            <div class="voice-card" id="{card_id}">
+                <div class="tick-box" onclick="document.getElementById('{btn_id}').click()">
+                    {'✓' if is_selected else ''}
+                </div>
                 <div class="card-header">
                     <div class="card-title">{voice["name"]}</div>
-                    <div class="selection-indicator">
-                        <div class="select-btn-container">
-                            <!-- Button will be placed here by Streamlit -->
-                        </div>
-                    </div>
                 </div>
                 <div class="card-tags">
                     <span class="bubble">{voice["gender"]}</span>
@@ -441,29 +441,70 @@ def render_audio_generator():
                 </audio>
             </div>
             """
-    
             st.markdown(card_html, unsafe_allow_html=True)
     
-            # Button styled to appear at top-right (absolute)
-            btn_container_id = f"select_btn_{voice['id']}_container"
-            with st.container():
-                st.markdown(f"""
-                <style>
-                #{btn_container_id} {{
-                    position: absolute;
-                    top: 10px;
-                    right: 10px;
-                    z-index: 10;
-                }}
-                </style>
-                <div id="{btn_container_id}">
-                """, unsafe_allow_html=True)
+            # Hidden button that gets triggered via JS
+            if st.button("", key=btn_id):
+                st.session_state.selected_voice = voice["id"]
+                st.rerun()
     
-                if st.button("✓" if is_selected else "Select", key=f"select_btn_{voice['id']}", help="Click to select this voice"):
-                    st.session_state.selected_voice = voice["id"]
-                    st.rerun()
+    # Add CSS to style the tick-box
+    st.markdown("""
+    <style>
+    .voice-card {
+        position: relative;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        transition: all 0.3s ease;
+        background-color: #fff;
+    }
     
-                st.markdown("</div>", unsafe_allow_html=True)
+    .voice-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .tick-box {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 24px;
+        height: 24px;
+        background-color: #f0f0f0;
+        border: 2px solid #4CAF50;
+        border-radius: 4px;
+        font-size: 16px;
+        color: #4CAF50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-weight: bold;
+    }
+    
+    .voice-card .tick-box:hover {
+        background-color: #e0ffe0;
+    }
+    .card-title {
+        font-weight: bold;
+        font-size: 1.1em;
+        margin-bottom: 10px;
+    }
+    .bubble {
+        background-color: #f0f0f0;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        margin-right: 5px;
+    }
+    .card-tags {
+        margin-bottom: 15px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     
     # Add CSS for the voice cards
     st.markdown("""
