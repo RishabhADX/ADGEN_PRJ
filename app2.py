@@ -439,13 +439,14 @@ def render_audio_generator():
                     <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
                     Your browser does not support the audio element.
                 </audio>
+                if st.button("hello", key=f"hidden_btn_{voice['id']}"):
+                select_voice(voice["id"])
+                st.rerun()
             </div>
             """
             
             # Place a hidden button that will be triggered by the JavaScript click
-            if st.button("hello", key=f"hidden_btn_{voice['id']}"):
-                select_voice(voice["id"])
-                st.rerun()
+            
             
             # Display the HTML card
             st.markdown(card_html, unsafe_allow_html=True)
