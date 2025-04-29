@@ -416,35 +416,35 @@ def render_audio_generator():
     cols = st.columns(3)
     for i, voice in enumerate(voices):
         # Replace the current voice card rendering with this:
-with cols[i % 3]:
-    # Check if this voice is selected
-    is_selected = st.session_state.selected_voice == voice["id"]
-    card_class = "card card-selected" if is_selected else "card"
-    
-    # Create a container for the entire card
-    with st.container():
-        # Start of card content - use a div with padding for the card
-        st.markdown(f"""
-        <div class="{card_class}" style="padding-bottom: 0;">
-            <div class="card-title">{voice["name"]}</div>
-            <div style="margin-bottom: 15px;">
-                <span class="bubble">{voice["gender"]}</span>
-                <span class="bubble">{voice["style"]}</span>
-                <span class="bubble">{voice["language"]}</span>
-            </div>
+        with cols[i % 3]:
+            # Check if this voice is selected
+            is_selected = st.session_state.selected_voice == voice["id"]
+            card_class = "card card-selected" if is_selected else "card"
             
-            <!-- Embed the audio player directly in the HTML -->
-            <audio controls style="width: 100%; margin-bottom: 15px;">
-                <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
-                Your browser does not support the audio element.
-            </audio>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # The select button sits just below the card
-        if st.button("Select" if not is_selected else "Selected", key=f"select_{voice['id']}"):
-            select_voice(voice["id"])
-            st.rerun()
+            # Create a container for the entire card
+            with st.container():
+                # Start of card content - use a div with padding for the card
+                st.markdown(f"""
+                <div class="{card_class}" style="padding-bottom: 0;">
+                    <div class="card-title">{voice["name"]}</div>
+                    <div style="margin-bottom: 15px;">
+                        <span class="bubble">{voice["gender"]}</span>
+                        <span class="bubble">{voice["style"]}</span>
+                        <span class="bubble">{voice["language"]}</span>
+                    </div>
+                    
+                    <!-- Embed the audio player directly in the HTML -->
+                    <audio controls style="width: 100%; margin-bottom: 15px;">
+                        <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # The select button sits just below the card
+                if st.button("Select" if not is_selected else "Selected", key=f"select_{voice['id']}"):
+                    select_voice(voice["id"])
+                    st.rerun()
     
     # Pagination controls
     st.markdown("<div class='pagination'>", unsafe_allow_html=True)
