@@ -419,105 +419,99 @@ def render_audio_generator():
             # Check if this voice is selected
             is_selected = st.session_state.selected_voice == voice["id"]
             
-            # Create a container with a unique key for each voice card
-            card_key = f"voice_card_{voice['id']}"
+            # Create a clickable card with selection indicator
+            card_id = f"voice_card_{voice['id']}"
             
-            # Use HTML/CSS to create a clickable card with selection indicator
-            st.markdown(f"""
-            <div id="{card_key}" 
-                class="voice-card {'selected' if is_selected else ''}" 
-                onclick="selectVoice('{voice['id']}')">
+            # Generate HTML for the card with a selection indicator in the top-right corner
+            card_html = f"""
+            <div id="{card_id}" class="voice-card {'selected' if is_selected else ''}" 
+                 onclick="selectVoice('{voice['id']}')">
                 <div class="card-header">
                     <div class="card-title">{voice["name"]}</div>
-                    {f'<div class="selected-indicator">✓</div>' if is_selected else ''}
+                    <div class="selection-indicator">{'✓' if is_selected else ''}</div>
                 </div>
                 <div class="card-tags">
                     <span class="bubble">{voice["gender"]}</span>
                     <span class="bubble">{voice["style"]}</span>
                     <span class="bubble">{voice["language"]}</span>
                 </div>
-                <audio controls style="width: 100%; margin: 10px 0;">
+                <audio controls style="width: 100%; margin-bottom: 10px;">
                     <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
                     Your browser does not support the audio element.
                 </audio>
             </div>
-            """, unsafe_allow_html=True)
+            """
             
-            # Hidden button that gets triggered by JavaScript when card is clicked
+            # Place a hidden button that will be triggered by the JavaScript click
             if st.button("", key=f"hidden_btn_{voice['id']}", style="display:none;"):
                 select_voice(voice["id"])
                 st.rerun()
+            
+            # Display the HTML card
+            st.markdown(card_html, unsafe_allow_html=True)
+            
+            # JavaScript to handle card selection
+            st.markdown(f"""
+            <script>
+            function selectVoice(voiceId) {{
+                // Simulate a click on the hidden button
+                document.querySelector('button[key="hidden_btn_{voice["id"]}"]').click();
+            }}
+            </script>
+            """, unsafe_allow_html=True)
     
-    # Add JavaScript to make cards clickable
+    # Add CSS for the voice cards
     st.markdown("""
-    <script>
-        function selectVoice(voiceId) {
-            // Find and click the hidden button for this voice
-            document.querySelector(`button[key="hidden_btn_${voiceId}"]`).click();
-        }
-    </script>
-    
     <style>
-        /* Voice card styling */
-        .voice-card {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-            transition: all 0.2s ease;
-            cursor: pointer;
-            position: relative;
-        }
-        
-        .voice-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        
-        .voice-card.selected {
-            border: 2px solid #4287f5;
-            background-color: rgba(66, 135, 245, 0.05);
-        }
-        
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        
-        .card-title {
-            font-weight: bold;
-            font-size: 1.1em;
-        }
-        
-        .selected-indicator {
-            background-color: #4287f5;
-            color: white;
-            border-radius: 50%;
-            width: 25px;
-            height: 25px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-        }
-        
-        .bubble {
-            background-color: #f0f0f0;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 0.85em;
-            margin-right: 5px;
-            white-space: nowrap;
-        }
-        
-        .card-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-            margin-bottom: 10px;
-        }
+    .voice-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+    }
+    
+    .voice-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .voice-card.selected {
+        border: 2px solid #4CAF50;
+        background-color: rgba(76, 175, 80, 0.05);
+    }
+    
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    
+    .card-title {
+        font-weight: bold;
+        font-size: 1.1em;
+    }
+    
+    .selection-indicator {
+        color: #4CAF50;
+        font-weight: bold;
+        font-size: 1.2em;
+    }
+    
+    .card-tags {
+        margin-bottom: 15px;
+    }
+    
+    .bubble {
+        background-color: #f0f0f0;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        margin-right: 5px;
+    }
     </style>
     """, unsafe_allow_html=True)
     
