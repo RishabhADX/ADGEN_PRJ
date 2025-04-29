@@ -1,692 +1,654 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
-import requests
-import time
-import os
-import re
-from io import BytesIO
+import base64
 from PIL import Image
-from elevenlabs import ElevenLabs
-from crewai import Agent, Task, Crew
-from langchain_groq import ChatGroq
-from langchain_community.tools import SerperDevTool
-from pydantic import BaseModel
-from langchain.memory import ConversationBufferMemory
-from langchain.chains import ConversationChain
-from langchain.schema import SystemMessage
+import io
+import time
 
 # Set page configuration
 st.set_page_config(
-    page_title="AdGen AI Platform",
+    page_title="AI Creative Suite",
     page_icon="🎬",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Initialize session state variables if they don't exist
+# Define color scheme
+PRIMARY_COLOR = "#ADD8E6"  # Light blue
+SECONDARY_COLOR = "#F0F8FF"  # AliceBlue
+TEXT_COLOR = "#2C3E50"  # Dark blue/gray
+
+# Apply custom CSS
+st.markdown(f"""
+<style>
+    .stApp {{
+        background-color: white;
+    }}
+    .stButton>button {{
+        background-color: {PRIMARY_COLOR};
+        color: {TEXT_COLOR};
+        border-radius: 6px;
+        border: 1px solid {PRIMARY_COLOR};
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }}
+    .stButton>button:hover {{
+        background-color: white;
+        color: {PRIMARY_COLOR};
+        border: 1px solid {PRIMARY_COLOR};
+    }}
+    .card {{
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        margin: 10px;
+        border: 1px solid #e0e0e0;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        height: 100%;
+    }}
+    .card:hover {{
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        border: 1px solid {PRIMARY_COLOR};
+    }}
+    .card-selected {{
+        border: 2px solid {PRIMARY_COLOR};
+        background-color: {SECONDARY_COLOR};
+    }}
+    .card-title {{
+        font-weight: 600;
+        font-size: 1.2rem;
+        margin-bottom: 10px;
+        color: {TEXT_COLOR};
+    }}
+    .play-button {{
+        background-color: {PRIMARY_COLOR};
+        color: white;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        margin: 10px auto;
+    }}
+    .pagination {{
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+    }}
+    .pagination-button {{
+        margin: 0 5px;
+        cursor: pointer;
+        padding: 5px 10px;
+        border-radius: 4px;
+        background-color: {PRIMARY_COLOR};
+        color: {TEXT_COLOR};
+    }}
+    .main-header {{
+        color: {TEXT_COLOR};
+        text-align: center;
+        margin-bottom: 30px;
+        font-size: 2.5rem;
+        font-weight: 700;
+    }}
+    .sub-header {{
+        color: {TEXT_COLOR};
+        font-size: 1.8rem;
+        font-weight: 600;
+        margin-bottom: 20px;
+    }}
+</style>
+""", unsafe_allow_html=True)
+
+# Initialize session state variables
+if 'page' not in st.session_state:
+    st.session_state.page = "home"
 if 'script' not in st.session_state:
     st.session_state.script = ""
-if 'cleaned_summary' not in st.session_state:
-    st.session_state.cleaned_summary = ""
-if 'step' not in st.session_state:
-    st.session_state.step = "start"
-if 'replicas_df' not in st.session_state:
-    st.session_state.replicas_df = None
-if 'selected_replica' not in st.session_state:
-    st.session_state.selected_replica = None
-if 'selected_voice_id' not in st.session_state:
-    st.session_state.selected_voice_id = None
-if 'selected_voice_name' not in st.session_state:
-    st.session_state.selected_voice_name = None
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
+if 'selected_voice' not in st.session_state:
+    st.session_state.selected_voice = None
+if 'selected_video_style' not in st.session_state:
+    st.session_state.selected_video_style = None
+if 'generated_audio' not in st.session_state:
+    st.session_state.generated_audio = None
+if 'generated_video' not in st.session_state:
+    st.session_state.generated_video = None
+if 'voice_page' not in st.session_state:
+    st.session_state.voice_page = 1
+if 'video_page' not in st.session_state:
+    st.session_state.video_page = 1
+if 'screenplay_images' not in st.session_state:
+    st.session_state.screenplay_images = []
 
-# API Keys (in a real app, these should be secured properly)
-serper_api_key = st.secrets["SERPER_API_KEY"] if "SERPER_API_KEY" in st.secrets else "14b865cf1dae8d1149dea6a7d2c93f8ac0105970"
-openai_api_key = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else "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"
-groq_api_key = st.secrets["GROQ_API_KEY"] if "GROQ_API_KEY" in st.secrets else "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"
-tavus_api_key = st.secrets["TAVUS_API_KEY"] if "TAVUS_API_KEY" in st.secrets else "d57e6c687a894213aa87abad7c1c5f56"
-gemini_api_key = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else "AIzaSyBLzfjImenFp60acvXgKygaEDKGqKfHyKI"
-elevenlabs_api_key = st.secrets["ELEVENLABS_API_KEY"] if "ELEVENLABS_API_KEY" in st.secrets else "sk_457392759b066ebb9b695f4f7f3b85d177d04350c85e494a"
+# Navigation functions
+def go_to_home():
+    st.session_state.page = "home"
 
-# Initialize ElevenLabs client
-elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
+def go_to_script_generator():
+    st.session_state.page = "script_generator"
 
-# Set environment variables for API keys
-os.environ["SERPER_API_KEY"] = serper_api_key
-os.environ["OPENAI_API_KEY"] = openai_api_key
-os.environ["GROQ_API_KEY"] = groq_api_key
+def go_to_audio_generator():
+    st.session_state.page = "audio_generator"
 
-# Default script for demonstration
-default_script = (
-    "Hey there... Are you feeling overwhelmed by credit card debt? I was too... until I found something that changed everything. "
-    "I used to dread every bill that came in... It felt like a never-ending cycle of stress. "
-    "But then I discovered this debt relief program that helped consolidate my payments into one simple monthly fee. "
-    "The best part? It barely impacted my credit score! I finally started to breathe again, knowing there was a way out. "
-    "If you're ready to take that first step towards relief, check it out now! You deserve to feel free from debt..."
-)
+def go_to_video_generator():
+    st.session_state.page = "video_generator"
 
-# Helper functions
-def clean_summary(text):
-    lines = text.strip().split('\n')
-    cleaned = ["Cleaned Campaign Summary:\n"]
-    for line in lines:
-        line = line.strip()
-        # Skip unwanted lines
-        if not line or line.startswith("✅") or line == "=" or "To be determined" in line or line == "END OF CHAT":
-            continue
-        cleaned.append(line)
-    return "\n".join(cleaned)
+def go_to_screenplay_generator():
+    st.session_state.page = "screenplay_generator"
 
-def get_replicas():
-    url = "https://tavusapi.com/v2/replicas"
-    headers = {"x-api-key": tavus_api_key}
+def set_script(script_text):
+    st.session_state.script = script_text
+    go_to_audio_generator()
+
+def select_voice(voice_id):
+    st.session_state.selected_voice = voice_id
+
+def select_video_style(style_id):
+    st.session_state.selected_video_style = style_id
+
+# Sample data (would be replaced with actual API calls)
+def get_voice_samples(page=1, per_page=6):
+    # Mock data
+    all_voices = [
+        {"id": i, "name": f"Voice {i}", "gender": "Female" if i % 2 == 0 else "Male", 
+         "style": ["Friendly", "Professional"][i % 2], "language": "English",
+         "sample": f"sample_audio_{i}.mp3"} for i in range(1, 21)
+    ]
     
-    try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            data = response.json()
-            df = pd.json_normalize(data['data'])
-            df_selected = df[['thumbnail_video_url', 'model_name', 'replica_id', 'replica_name']]
-            return df_selected
-        else:
-            st.error(f"Error fetching replicas: {response.status_code} - {response.text}")
-            return pd.DataFrame()
-    except Exception as e:
-        st.error(f"Exception while fetching replicas: {e}")
-        return pd.DataFrame()
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    return all_voices[start_idx:end_idx], len(all_voices)
 
-def get_elevenlabs_voices():
-    try:
-        response = elevenlabs_client.voices.search(include_total_count=True, page_size=100)
-        return response.voices
-    except Exception as e:
-        st.error(f"Error fetching ElevenLabs voices: {e}")
-        return []
-
-def generate_and_fetch_video(replica_id, video_name, script_text, audio_url=None, background_url=None):
-    url = "https://tavusapi.com/v2/videos"
-    headers = {
-        "x-api-key": tavus_api_key,
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "replica_id": replica_id,
-        "script": script_text,
-        "video_name": video_name
-    }
+def get_video_styles(page=1, per_page=6):
+    # Mock data
+    all_styles = [
+        {"id": i, "name": f"Style {i}", 
+         "description": f"Creative video style {i} with unique visual elements",
+         "preview": f"video_preview_{i}.mp4"} for i in range(1, 21)
+    ]
     
-    if audio_url:
-        payload["audio_url"] = audio_url
-    if background_url:
-        payload["background_url"] = background_url
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    return all_styles[start_idx:end_idx], len(all_styles)
 
-    try:
-        with st.spinner("Creating video..."):
-            creation_response = requests.post(url, json=payload, headers=headers)
+# Simulated functions for AI features
+def generate_script(prompt):
+    # In a real implementation, this would call your AI API
+    time.sleep(2)  # Simulate API call
+    return f"""# Sample Script: {prompt}
 
-        if creation_response.status_code != 200:
-            return f"❌ Error creating video: {creation_response.status_code} - {creation_response.text}", None
+FADE IN:
 
-        video_id = creation_response.json().get("video_id")
-        if not video_id:
-            return "❌ No video ID returned by Tavus.", None
+EXT. CITY STREET - DAY
 
-        # Polling until status is 'ready'
-        status_url = f"https://tavusapi.com/v2/videos/{video_id}"
-        
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for i in range(20):  # Up to ~60 seconds
-            progress_bar.progress((i+1)/20)
-            status_text.text(f"Checking video status ({i+1}/20)...")
-            
-            time.sleep(3)
-            status_response = requests.get(status_url, headers=headers)
-            status_data = status_response.json()
-            
-            if status_data.get("status") == "ready":
-                progress_bar.progress(1.0)
-                stream_url = status_data.get("stream_url")
-                return f"✅ Video is ready! Video ID: {video_id}", stream_url
+A bustling city street with people hurrying about their day.
 
-        return "⏳ Video is still processing. Please check back later.", None
-        
-    except Exception as e:
-        return f"❌ Exception during video generation: {str(e)}", None
+NARRATOR (V.O.)
+In a world where technology and humanity intersect...
 
-# Mock function for audio generation with ElevenLabs
-def generate_audio_with_elevenlabs(voice_id, text, speed=1.0, stability=0.5):
-    # In a real implementation, this would call the ElevenLabs API
-    # For now, we'll simulate the process with a delay
-    
-    st.info(f"Generating audio with ElevenLabs... (Voice ID: {voice_id})")
-    progress_bar = st.progress(0)
-    
-    # Simulate the API call with delay
-    for i in range(5):
-        progress_bar.progress((i+1)/5)
-        time.sleep(1)  # Simulate work being done
-    
-    # Placeholder for actual API response
-    # In a real implementation, this would return the URL or bytes of the generated audio
-    return "https://via.placeholder.com/300x50.mp3?text=Generated+Audio"
+[Character descriptions and additional scenes would follow...]
 
-# Mock function for CrewAI script generation
-def generate_script_with_crewai(campaign_summary):
-    # In a real implementation, this would call your CrewAI workflow
-    # For now, we'll simulate the process with a delay and return the default script
-    
-    st.info("Generating script with CrewAI... (This may take a few minutes)")
-    progress_bar = st.progress(0)
-    
-    # Simulate the CrewAI process with delay
-    for i in range(10):
-        progress_bar.progress((i+1)/10)
-        time.sleep(1)  # Simulate work being done
-    
-    # In the real implementation, this would be the actual result from CrewAI
-    script_result = {
-        "hook": "Hey there... Are you feeling overwhelmed by credit card debt? I was too... until I found something that changed everything.",
-        "body": "I used to dread every bill that came in... It felt like a never-ending cycle of stress. But then I discovered this debt relief program that helped consolidate my payments into one simple monthly fee. The best part? It barely impacted my credit score!",
-        "cta": "If you're ready to take that first step towards relief, check it out now! You deserve to feel free from debt...",
-        "final_script": default_script
-    }
-    
-    return script_result
+FADE OUT.
+"""
+
+def generate_audio(script, voice_id):
+    # In a real implementation, this would call your AI API
+    time.sleep(2)  # Simulate API call
+    return "generated_audio.mp3"  # This would be a file path or base64 data
+
+def generate_video(script, style_id, audio=None):
+    # In a real implementation, this would call your AI API
+    time.sleep(3)  # Simulate API call
+    return "generated_video.mp4"  # This would be a file path or base64 data
+
+def generate_screenplay_images(screenplay):
+    # In a real implementation, this would parse the screenplay and generate images
+    time.sleep(2)  # Simulate API call
+    # Return mock image data
+    return ["image1.jpg", "image2.jpg", "image3.jpg"]
+
+# Mock function to simulate playing audio
+def play_audio_sample(sample_id):
+    st.audio(f"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{sample_id}.mp3")
+
+# Mock function to get a placeholder image
+def get_placeholder_image(width, height, text="Preview"):
+    image = Image.new('RGB', (width, height), color=(173, 216, 230))
+    return image
 
 # UI Components
-def render_start_page():
-    st.title("🎬 AdGen AI Platform")
-    st.subheader("Create compelling ad campaigns with AI")
+def render_sidebar():
+    with st.sidebar:
+        st.image("https://via.placeholder.com/150x150.png?text=AI+Suite", width=150)
+        st.markdown("### Navigation")
+        
+        if st.button("🏠 Home", key="nav_home"):
+            go_to_home()
+            
+        if st.button("📝 Script Generator", key="nav_script"):
+            go_to_script_generator()
+            
+        if st.session_state.script:
+            if st.button("🎙️ Audio Generator", key="nav_audio"):
+                go_to_audio_generator()
+                
+            if st.button("🎬 Video Generator", key="nav_video"):
+                go_to_video_generator()
+                
+        if st.button("🎭 Screenplay Generator", key="nav_screenplay"):
+            go_to_screenplay_generator()
+            
+        st.markdown("---")
+        st.markdown("### Current Progress")
+        
+        progress_items = {
+            "Script": "✅" if st.session_state.script else "❌",
+            "Voice": "✅" if st.session_state.selected_voice else "❌",
+            "Audio": "✅" if st.session_state.generated_audio else "❌",
+            "Video": "✅" if st.session_state.generated_video else "❌"
+        }
+        
+        for item, status in progress_items.items():
+            st.markdown(f"{status} {item}")
+
+def render_home():
+    st.markdown("<h1 class='main-header'>AI Creative Suite</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 1.2rem; margin-bottom: 40px;'>Transform your ideas into professional scripts, audio, and videos with AI</p>", unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### Do you already have a script?")
-        if st.button("Yes, I have a script", use_container_width=True):
-            st.session_state.step = "edit_script"
-            st.rerun()
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">AI Creative Generator</div>
+            <p>Create professional scripts, audio, and videos using our AI tools. Start from scratch or use your existing script.</p>
+            <p>Perfect for content creators, marketers, and storytellers.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("Start Creating", key="start_creating"):
+            if st.session_state.script:
+                go_to_audio_generator()
+            else:
+                go_to_script_generator()
     
     with col2:
-        st.markdown("### Need to create a new script?")
-        if st.button("No, help me create one", use_container_width=True):
-            st.session_state.step = "briefer"
-            st.rerun()
-def process_briefer_input(user_input):
-    # Initialize the briefer components if not already initialized
-    if not st.session_state.breifer_initialized:
-        try:
-            # Initialize Groq LLM
-            st.session_state.llm = ChatGroq(
-                model="groq/gemma2-9b-it",
-                temperature=0.7,
-                max_tokens=2048
-            )
-            
-            # Load prompt from file or just define it directly if needed
-            system_prompt = SystemMessage(content="Your system prompt content here")
-            
-            # Set up memory
-            st.session_state.memory = ConversationBufferMemory(return_messages=True)
-            st.session_state.memory.chat_memory.add_message(system_prompt)
-            
-            # Create conversation chain
-            st.session_state.conversation_chain = ConversationChain(
-                llm=st.session_state.llm,
-                memory=st.session_state.memory,
-                verbose=False
-            )
-            
-            st.session_state.breifer_initialized = True
-            
-        except Exception as e:
-            st.error(f"Error initializing briefer: {e}")
-            return "I'm having trouble initializing. Let's continue with a simpler approach. What's your campaign about?"
-    
-    try:
-        # Get response from the conversation chain
-        response = st.session_state.conversation_chain.predict(input=user_input)
-        return response
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">Screenplay Generator</div>
+            <p>Create professional screenplays with our AI-powered tools. Visualize your story with generated images.</p>
+            <p>Perfect for screenwriters, filmmakers, and visual storytellers.</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-    except Exception as e:
-        st.error(f"Error processing with Groq LLM: {e}")
-        return "I'm having trouble processing your request. Could you tell me about your campaign goal?"
-      
-def render_script_generation_page():
-    st.title("📝 Script Generation")
-    st.subheader("Creating your ad script with AI")
+        if st.button("Create Screenplay", key="create_screenplay"):
+            go_to_screenplay_generator()
     
-    st.markdown("### Campaign Brief Summary")
-    st.info(st.session_state.cleaned_summary)
+    st.markdown("---")
     
-    if 'script_generated' not in st.session_state:
-        st.session_state.script_generated = False
-    
-    if not st.session_state.script_generated:
-        if st.button("Generate Script with CrewAI"):
-            with st.spinner("Generating script with CrewAI... (This may take several minutes)"):
-                try:
-                    # Define the crew() function with access to cleaned_summary
-                    def crew():
-                        # Access the cleaned summary from session state
-                        cleaned_summary = st.session_state.cleaned_summary
-                        
-                        # Your existing script generator code
-                        class Script(BaseModel):
-                            hook: str
-                            body: str
-                            cta: str
-                            final_script: str
-                        
-                        # The rest of your crew() function with task_planning, researcher, writer, etc.
-                        # Make sure all f-strings that reference {cleaned_summary} can access it
-                        
-                        # Define your agents and tasks (from your paste.txt)
-                        
-                        # Run the crew workflow
-                        result = crew.kickoff()
-                        return result
-                    
-                    # Run the crew function
-                    script_result = crew()
-                    
-                    # Store the script in session state
-                    st.session_state.script = script_result.final_script
-                    st.session_state.script_generated = True
-                    
-                except Exception as e:
-                    st.error(f"Error generating script: {e}")
-                    # Use default script as fallback
-                    st.session_state.script = default_script
-                    st.session_state.script_generated = True
-                    st.rerun()
-    
-    if st.session_state.script_generated:
-        st.markdown("### Generated Script")
-        st.success("Script generated successfully!")
-        st.text_area("Generated Script", st.session_state.script, height=300)
-        
-        if st.button("Edit Script"):
-            st.session_state.step = "edit_script"
-            st.rerun()
-    
-    # Add a back button
-    if st.button("Back to Briefer"):
-        st.session_state.step = "briefer"
-        st.rerun()
-
-def render_script_editor_page():
-    st.title("✏️ Script Editor")
-    
-    # If there's no script yet (coming directly from start page)
-    if not st.session_state.script:
-        st.session_state.script = default_script
-    
-    # Script editing section
-    st.subheader("Edit Your Script")
-    new_script = st.text_area("Script", st.session_state.script, height=300)
-    
-    if st.button("Save Script"):
-        st.session_state.script = new_script
-        st.success("Script saved!")
-    
-    # Section to choose next steps
-    st.subheader("What would you like to do next?")
+    st.markdown("<h2 class='sub-header'>How It Works</h2>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("Generate Audio", use_container_width=True):
-            st.session_state.step = "audio_generation"
-            st.rerun()
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">1. Create Script</div>
+            <p>Generate a professional script using our AI chat interface or upload your own.</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col2:
-        if st.button("Generate Video", use_container_width=True):
-            st.session_state.step = "video_generation"
-            st.rerun()
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">2. Generate Audio</div>
+            <p>Select from a variety of AI voices or upload your own audio recording.</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col3:
-        if st.button("Generate Images", use_container_width=True):
-            st.session_state.step = "image_generation"
-            st.rerun()
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">3. Create Video</div>
+            <p>Choose a video style and generate a professional video with your script and audio.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-def render_audio_generation_page():
-    st.title("🔊 Audio Generation")
-    st.subheader("Generate voice audio for your ad")
+def render_script_generator():
+    st.markdown("<h1 class='main-header'>Script Generator</h1>", unsafe_allow_html=True)
     
-    # Display the current script
-    st.markdown("### Current Script")
-    st.info(st.session_state.script)
+    # Two options: Generate with AI or Upload
+    col1, col2 = st.columns(2)
     
-    # ElevenLabs voice selection (integrated from second snippet)
-    st.subheader("Select Voice from ElevenLabs")
-    
-    # Fetch voices if not already in session state
-    if 'elevenlabs_voices' not in st.session_state:
-        with st.spinner("Loading ElevenLabs voices..."):
-            st.session_state.elevenlabs_voices = get_elevenlabs_voices()
-    
-    # Display voices in a grid
-    if st.session_state.elevenlabs_voices:
-        cards_per_row = 3
+    with col1:
+        st.markdown("<h3>Generate with AI</h3>", unsafe_allow_html=True)
         
-        for i in range(0, len(st.session_state.elevenlabs_voices), cards_per_row):
-            cols = st.columns(cards_per_row)
-            for j, col in enumerate(cols):
-                if i + j < len(st.session_state.elevenlabs_voices):
-                    voice = st.session_state.elevenlabs_voices[i + j]
-                    name = voice.name
-                    accent = voice.labels.get("accent", "Unknown")
-                    gender = voice.labels.get("gender", "Unknown")
-                    age = voice.labels.get("age", "Unknown")
-                    use_case = voice.labels.get("use_case", "Unknown")
-                    preview_url = voice.preview_url
-                    voice_id = voice.voice_id
+        user_prompt = st.text_area("Describe what kind of script you want to create:", 
+                                  height=100, 
+                                  placeholder="Example: A 30-second commercial for a new coffee brand targeting young professionals...")
+        
+        if st.button("Generate Script", key="gen_script_btn"):
+            with st.spinner("Generating your script..."):
+                generated_script = generate_script(user_prompt)
+                st.session_state.script = generated_script
+                st.success("Script generated successfully!")
+                
+        # Chat interface for refining the script
+        st.markdown("---")
+        st.markdown("<h3>Refine with Chat</h3>", unsafe_allow_html=True)
+        
+        for message in st.session_state.chat_history:
+            role = "🧑‍💼 You" if message["role"] == "user" else "🤖 AI"
+            st.markdown(f"**{role}**: {message['content']}")
+        
+        user_message = st.text_input("Ask for changes or refinements:", key="chat_input")
+        
+        if st.button("Send", key="send_chat"):
+            if user_message:
+                # Add user message to chat history
+                st.session_state.chat_history.append({"role": "user", "content": user_message})
+                
+                # Simulate AI response
+                with st.spinner("AI is thinking..."):
+                    time.sleep(1.5)
+                    ai_response = f"I've refined the script based on your request: '{user_message}'. The changes have been applied."
+                    st.session_state.chat_history.append({"role": "assistant", "content": ai_response})
                     
-                    with col:
-                        st.markdown(f"**{name}**")
-                        st.markdown(
-                            f"Accent: {accent} | Gender: {gender} | Age: {age} | Use Case: {use_case}"
-                        )
-                        # Preview the voice
-                        st.audio(preview_url)
-                        # Select button for this voice
-                        if st.button(f"Select {name}", key=f"voice_{voice_id}"):
-                            st.session_state.selected_voice_id = voice_id
-                            st.session_state.selected_voice_name = name
-                            st.success(f"Selected voice: {name}")
-    else:
-        st.error("Could not load ElevenLabs voices. Please check your API key or try again later.")
+                    # In a real implementation, you would update the script here
+                    if st.session_state.script:
+                        st.session_state.script += "\n\n[Updated based on user feedback]"
+                
+                st.experimental_rerun()
     
-    # Generation options
-    st.subheader("Generate Audio")
-    
-    with st.form("audio_generation_form"):
-        if 'selected_voice_id' in st.session_state:
-            st.info(f"Selected voice: {st.session_state.selected_voice_name}")
+    with col2:
+        st.markdown("<h3>Upload Your Script</h3>", unsafe_allow_html=True)
+        
+        uploaded_file = st.file_uploader("Upload a script file", type=["txt", "docx", "pdf"])
+        
+        if uploaded_file is not None:
+            # In a real implementation, you would parse the file content
+            file_content = uploaded_file.getvalue().decode("utf-8") if uploaded_file.type == "text/plain" else "Script content from uploaded file"
+            st.session_state.script = file_content
+            st.success(f"Uploaded script: {uploaded_file.name}")
+        
+        # Preview area
+        st.markdown("---")
+        st.markdown("<h3>Script Preview</h3>", unsafe_allow_html=True)
+        
+        if st.session_state.script:
+            st.text_area("Your script:", value=st.session_state.script, height=400, key="script_preview")
+            
+            if st.button("Edit Script", key="edit_script"):
+                # Enable editing
+                pass
+                
+            if st.button("Proceed to Audio Generation", key="proceed_to_audio"):
+                go_to_audio_generator()
         else:
-            st.warning("Please select a voice first")
-        
-        speed = st.slider("Speed", min_value=0.5, max_value=2.0, value=1.0, step=0.1)
-        stability = st.slider("Stability", min_value=0.0, max_value=1.0, value=0.5, step=0.1)
-        
-        submit = st.form_submit_button("Generate Audio")
-        
-        if submit and 'selected_voice_id' in st.session_state:
-            # Call the audio generation function
-            audio_url = generate_audio_with_elevenlabs(
-                st.session_state.selected_voice_id,
-                st.session_state.script,
-                speed,
-                stability
-            )
-            
-            # Play the generated audio
-            st.audio(audio_url, format="audio/mp3")
-            
-            # Download button for the generated audio
-            st.download_button(
-                label="Download Audio",
-                data=b"placeholder",  # This would be the actual audio data
-                file_name="generated_audio.mp3",
-                mime="audio/mp3"
-            )
+            st.info("No script available yet. Generate or upload a script to see preview.")
+
+def render_audio_generator():
+    st.markdown("<h1 class='main-header'>Audio Generator</h1>", unsafe_allow_html=True)
     
-    # Navigation buttons
-    col1, col2, col3 = st.columns(3)
+    if not st.session_state.script:
+        st.warning("You need a script first. Please generate or upload a script.")
+        if st.button("Go to Script Generator"):
+            go_to_script_generator()
+        return
+    
+    # Voice selection area
+    st.markdown("<h3>Select a Voice</h3>", unsafe_allow_html=True)
+    
+    # Get paginated voice samples
+    voices, total_voices = get_voice_samples(page=st.session_state.voice_page)
+    total_pages = (total_voices + 5) // 6  # 6 items per page, rounded up
+    
+    # Display voice cards in a grid
+    cols = st.columns(3)
+    for i, voice in enumerate(voices):
+        with cols[i % 3]:
+            # Check if this voice is selected
+            is_selected = st.session_state.selected_voice == voice["id"]
+            card_class = "card card-selected" if is_selected else "card"
+            
+            st.markdown(f"""
+            <div class="{card_class}">
+                <div class="card-title">{voice["name"]}</div>
+                <p><strong>Gender:</strong> {voice["gender"]}</p>
+                <p><strong>Style:</strong> {voice["style"]}</p>
+                <p><strong>Language:</strong> {voice["language"]}</p>
+                <div class="play-button">▶</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("Play Sample", key=f"play_{voice['id']}"):
+                    play_audio_sample(voice["id"])
+            with col2:
+                if st.button("Select" if not is_selected else "Selected", key=f"select_{voice['id']}"):
+                    select_voice(voice["id"])
+                    st.experimental_rerun()
+    
+    # Pagination controls
+    st.markdown("<div class='pagination'>", unsafe_allow_html=True)
+    cols = st.columns([1, 4, 1])
+    with cols[0]:
+        if st.session_state.voice_page > 1:
+            if st.button("← Previous", key="prev_voice_page"):
+                st.session_state.voice_page -= 1
+                st.experimental_rerun()
+                
+    with cols[1]:
+        st.markdown(f"<p style='text-align: center;'>Page {st.session_state.voice_page} of {total_pages}</p>", unsafe_allow_html=True)
+        
+    with cols[2]:
+        if st.session_state.voice_page < total_pages:
+            if st.button("Next →", key="next_voice_page"):
+                st.session_state.voice_page += 1
+                st.experimental_rerun()
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Upload own audio option
+    st.markdown("---")
+    st.markdown("<h3>Or Upload Your Own Audio</h3>", unsafe_allow_html=True)
+    
+    uploaded_audio = st.file_uploader("Upload an audio file", type=["mp3", "wav", "ogg"])
+    
+    if uploaded_audio is not None:
+        st.audio(uploaded_audio)
+        st.session_state.generated_audio = uploaded_audio
+        st.success("Audio uploaded successfully!")
+    
+    # Generate audio button
+    st.markdown("---")
+    
+    col1, col2 = st.columns([1, 1])
     
     with col1:
-        if st.button("Back to Script", use_container_width=True):
-            st.session_state.step = "edit_script"
-            st.rerun()
+        if st.button("Generate Audio", key="gen_audio_btn", disabled=not st.session_state.selected_voice and not uploaded_audio):
+            if st.session_state.selected_voice:
+                with st.spinner("Generating audio..."):
+                    generated_audio = generate_audio(st.session_state.script, st.session_state.selected_voice)
+                    st.session_state.generated_audio = generated_audio
+                    st.success("Audio generated successfully!")
     
     with col2:
-        if st.button("Generate Video", use_container_width=True):
-            st.session_state.step = "video_generation"
-            st.rerun()
+        if st.session_state.generated_audio and st.button("Proceed to Video Generation", key="proceed_to_video"):
+            go_to_video_generator()
     
-    with col3:
-        if st.button("Generate Images", use_container_width=True):
-            st.session_state.step = "image_generation"
-            st.rerun()
+    # Preview area for the script
+    st.markdown("---")
+    st.markdown("<h3>Script Preview</h3>", unsafe_allow_html=True)
+    
+    with st.expander("View Script", expanded=False):
+        st.markdown(st.session_state.script)
 
-def render_video_generation_page():
-    st.title("🎥 Video Generation")
-    st.subheader("Create videos with AI avatars")
+def render_video_generator():
+    st.markdown("<h1 class='main-header'>Video Generator</h1>", unsafe_allow_html=True)
     
-    # Display the current script
-    st.markdown("### Current Script")
-    st.info(st.session_state.script)
+    if not st.session_state.script:
+        st.warning("You need a script first. Please generate or upload a script.")
+        if st.button("Go to Script Generator"):
+            go_to_script_generator()
+        return
     
-    # Choose video platform
-    st.subheader("Select Video Platform")
+    # Video style selection area
+    st.markdown("<h3>Select a Video Style</h3>", unsafe_allow_html=True)
     
-    video_platform = st.radio(
-        "Choose a platform:",
-        ["Tavus", "HeyGen", "Veed.io"],
-        horizontal=True
+    # Get paginated video styles
+    video_styles, total_styles = get_video_styles(page=st.session_state.video_page)
+    total_pages = (total_styles + 5) // 6  # 6 items per page, rounded up
+    
+    # Display video style cards in a grid
+    cols = st.columns(3)
+    for i, style in enumerate(video_styles):
+        with cols[i % 3]:
+            # Check if this style is selected
+            is_selected = st.session_state.selected_video_style == style["id"]
+            card_class = "card card-selected" if is_selected else "card"
+            
+            # Create placeholder preview image
+            placeholder = get_placeholder_image(300, 200, f"Style {style['id']}")
+            
+            st.markdown(f"""
+            <div class="{card_class}">
+                <div class="card-title">{style["name"]}</div>
+                <p>{style["description"]}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.image(placeholder, use_column_width=True)
+            
+            if st.button("Select" if not is_selected else "Selected", key=f"select_video_{style['id']}"):
+                select_video_style(style["id"])
+                st.experimental_rerun()
+    
+    # Pagination controls
+    st.markdown("<div class='pagination'>", unsafe_allow_html=True)
+    cols = st.columns([1, 4, 1])
+    with cols[0]:
+        if st.session_state.video_page > 1:
+            if st.button("← Previous", key="prev_video_page"):
+                st.session_state.video_page -= 1
+                st.experimental_rerun()
+                
+    with cols[1]:
+        st.markdown(f"<p style='text-align: center;'>Page {st.session_state.video_page} of {total_pages}</p>", unsafe_allow_html=True)
+        
+    with cols[2]:
+        if st.session_state.video_page < total_pages:
+            if st.button("Next →", key="next_video_page"):
+                st.session_state.video_page += 1
+                st.experimental_rerun()
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Audio selection for the video
+    st.markdown("---")
+    st.markdown("<h3>Audio Selection</h3>", unsafe_allow_html=True)
+    
+    audio_option = st.radio(
+        "Choose audio source:",
+        ["Use Generated Audio", "Upload New Audio"]
     )
     
-    if video_platform == "Tavus":
-        # Load Tavus replicas if not already loaded
-        if st.session_state.replicas_df is None:
-            with st.spinner("Loading Tavus models..."):
-                st.session_state.replicas_df = get_replicas()
-        
-        if not st.session_state.replicas_df.empty:
-            st.subheader("Select Tavus Replica")
-            
-            # Initialize the page index if it doesn't exist
-            if 'page' not in st.session_state:
-                st.session_state.page = 0
-
-            # Paginate and display replicas in chunks
-            items_per_page = 6  # Set the number of replicas per page
-            total_pages = len(st.session_state.replicas_df) // items_per_page + (1 if len(st.session_state.replicas_df) % items_per_page != 0 else 0)
-            current_page = st.session_state.page
-
-            # Display replicas for the current page
-            start_idx = current_page * items_per_page
-            end_idx = start_idx + items_per_page
-            replicas_to_display = st.session_state.replicas_df.iloc[start_idx:end_idx]
-
-            cols = st.columns(3)
-            for i, (index, row) in enumerate(replicas_to_display.iterrows()):
-                with cols[i % 3]:
-                    st.markdown(f"### {row['replica_name']}")
-                    
-                    # If there is a video thumbnail, show it; otherwise, show a placeholder
-                    if 'thumbnail_video_url' in row and row['thumbnail_video_url']:
-                        st.video(row['thumbnail_video_url'])
-                    else:
-                        # Fallback to a placeholder if there's no video thumbnail
-                        st.image("https://via.placeholder.com/150", caption=f"Thumbnail of {row['replica_name']}")
-
-                    if st.button(f"Select {row['replica_name']}", key=f"replica_{row['replica_id']}"):
-                        st.session_state.selected_replica = {
-                            'id': row['replica_id'],
-                            'name': row['replica_name']
-                        }
-                        st.success(f"Selected replica: {row['replica_name']}")
-
-            # Pagination Controls
-            col1, col2 = st.columns(2)
-            with col1:
-                if current_page > 0 and st.button("Previous", use_container_width=True):
-                    st.session_state.page = current_page - 1
-                    st.rerun()
-
-            with col2:
-                if current_page < total_pages - 1 and st.button("Next", use_container_width=True):
-                    st.session_state.page = current_page + 1
-                    st.rerun()
-
-            # Video generation form
-            st.subheader("Generate Video")
-            
-            with st.form("video_generation_form"):
-                if 'selected_replica' in st.session_state:
-                    st.info(f"Selected replica: {st.session_state.selected_replica['name']}")
-                else:
-                    st.warning("Please select a replica first")
-                
-                video_name = st.text_input("Video Name", "My Ad Campaign")
-                background_url = st.text_input("Background Video URL (optional)")
-                audio_url = st.text_input("Audio URL (optional)")
-                
-                submit = st.form_submit_button("Generate Video")
-                
-                if submit and 'selected_replica' in st.session_state:
-                    status_msg, video_url = generate_and_fetch_video(
-                        st.session_state.selected_replica['id'],
-                        video_name,
-                        st.session_state.script,
-                        audio_url,
-                        background_url
-                    )
-                    
-                    st.markdown(status_msg)
-                    
-                    if video_url:
-                        st.video(video_url)
+    if audio_option == "Use Generated Audio":
+        if st.session_state.generated_audio:
+            st.success("Using previously generated audio")
+            # In a real implementation, you would play the audio here
         else:
-            st.error("Could not load Tavus replicas. Please check your API key or try again later.")
+            st.warning("No generated audio found. Please generate audio first.")
+            if st.button("Go to Audio Generator"):
+                go_to_audio_generator()
+    else:
+        uploaded_audio = st.file_uploader("Upload an audio file for the video", type=["mp3", "wav", "ogg"], key="video_audio_upload")
+        if uploaded_audio is not None:
+            st.audio(uploaded_audio)
+            st.session_state.generated_audio = uploaded_audio
+            st.success("Audio uploaded successfully!")
     
-    elif video_platform == "HeyGen":
-        st.info("HeyGen integration is coming soon!")
-        
-        # Placeholder UI for HeyGen
-        st.subheader("HeyGen Models")
-        cols = st.columns(3)
-        for i in range(3):
-            with cols[i]:
-                st.markdown(f"### Model {i+1}")
-                st.image("https://via.placeholder.com/150", caption=f"HeyGen Model {i+1}")
-                st.button(f"Select Model {i+1}", key=f"heygen_model_{i}")
+    # Generate video button
+    st.markdown("---")
     
-    elif video_platform == "Veed.io":
-        st.info("Veed.io integration is coming soon!")
-        
-        # Placeholder UI for Veed.io
-        st.subheader("Veed.io Templates")
-        cols = st.columns(3)
-        for i in range(3):
-            with cols[i]:
-                st.markdown(f"### Template {i+1}")
-                st.image("https://via.placeholder.com/150", caption=f"Veed.io Template {i+1}")
-                st.button(f"Select Template {i+1}", key=f"veed_template_{i}")
+    if st.button("Generate Video", key="gen_video_btn", disabled=not st.session_state.selected_video_style or not st.session_state.generated_audio):
+        if st.session_state.selected_video_style and st.session_state.generated_audio:
+            with st.spinner("Generating video... This may take a few moments."):
+                generated_video = generate_video(
+                    st.session_state.script, 
+                    st.session_state.selected_video_style,
+                    st.session_state.generated_audio
+                )
+                st.session_state.generated_video = generated_video
+                st.success("Video generated successfully!")
+                
+                # Display a placeholder for the video
+                placeholder = get_placeholder_image(640, 360, "Video Preview")
+                st.image(placeholder, use_column_width=True)
+                
+                # Download button (in a real implementation, this would be a link to the actual video)
+                st.download_button(
+                    label="Download Video",
+                    data=io.BytesIO().getvalue(),  # Placeholder
+                    file_name="generated_video.mp4",
+                    mime="video/mp4"
+                )
+
+def render_screenplay_generator():
+    st.markdown("<h1 class='main-header'>Screenplay Generator</h1>", unsafe_allow_html=True)
     
-    # Navigation buttons
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns([3, 2])
     
     with col1:
-        if st.button("Back to Script", use_container_width=True):
-            st.session_state.step = "edit_script"
-            st.rerun()
-    
-    with col2:
-        if st.button("Generate Audio", use_container_width=True):
-            st.session_state.step = "audio_generation"
-            st.rerun()
-    
-    with col3:
-        if st.button("Generate Images", use_container_width=True):
-            st.session_state.step = "image_generation"
-            st.rerun()
-            
-def render_image_generation_page():
-    st.title("🖼️ Image Generation")
-    st.subheader("Create AI-generated images for your ad campaign")
-    
-    # Display the current script
-    st.markdown("### Current Script")
-    st.info(st.session_state.script)
-    
-    # Image prompt generation
-    st.subheader("Generate Image Prompts")
-    
-    if st.button("Generate Prompts Based on Script"):
-        # Simulate AI prompt generation (in real app, this would use your prompt_writer agent)
-        with st.spinner("Generating image prompts..."):
-            time.sleep(2)  # Simulating API call delay
-            
-            # These would be generated by your prompt_writer agent in a real implementation
-            generated_prompts = [
-                {
-                    "id": "scene_1",
-                    "prompt": "A person looking stressed while sorting through bills and credit card statements, dramatic lighting, shallow depth of field"
-                },
-                {
-                    "id": "scene_2",
-                    "prompt": "Close-up of a relaxed face with a relieved expression, soft natural lighting, symbolizing freedom from financial stress"
-                },
-                {
-                    "id": "scene_3",
-                    "prompt": "A clean, organized desk with a single bill and a calculator showing reduced numbers, representing financial organization"
-                }
-            ]
-            
-            st.session_state.image_prompts = generated_prompts
-            st.success("Prompts generated successfully!")
-    
-    # Display generated prompts if available
-    if 'image_prompts' in st.session_state:
-        st.subheader("Generated Prompts")
+        st.markdown("<h3>Write Your Screenplay</h3>", unsafe_allow_html=True)
         
-        for i, prompt in enumerate(st.session_state.image_prompts):
-            st.markdown(f"### Scene {i+1}")
-            st.text_area(f"Prompt {i+1}", prompt["prompt"], key=f"prompt_{i}", height=100)
-            
-            if st.button(f"Generate Image for Scene {i+1}", key=f"gen_image_{i}"):
-                # This would integrate with Gemini in a real implementation
-                with st.spinner("Generating image..."):
-                    time.sleep(3)  # Simulate API call
-                    
-                    # Placeholder image (would be replaced with actual generated image)
-                    st.image("https://via.placeholder.com/512x512", caption=f"Generated image for Scene {i+1}")
-                    st.download_button(
-                        label=f"Download Image {i+1}",
-                        data=BytesIO(b"placeholder"),  # Would be actual image data
-                        file_name=f"scene_{i+1}.png",
-                        mime="image/png"
-                    )
-    
-    # Navigation buttons
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("Back to Script", use_container_width=True):
-            st.session_state.step = "edit_script"
-            st.rerun()
+        screenplay = st.text_area("Enter your screenplay:", height=400, 
+                                placeholder="EXT. FOREST - DAY\n\nA small clearing in a dense forest. Sunlight filters through the canopy...",
+                                value=st.session_state.script if st.session_state.script else "")
+        
+        if st.button("Generate Images from Screenplay", key="gen_screenplay_images"):
+            with st.spinner("Analyzing screenplay and generating images..."):
+                # In a real implementation, this would parse the screenplay and generate relevant images
+                images = generate_screenplay_images(screenplay)
+                st.session_state.screenplay_images = images
+                st.session_state.script = screenplay  # Save the screenplay
+                st.success("Images generated successfully!")
     
     with col2:
-        if st.button("Generate Audio", use_container_width=True):
-            st.session_state.step = "audio_generation"
-            st.rerun()
+        st.markdown("<h3>Preview</h3>", unsafe_allow_html=True)
+        
+        if st.session_state.screenplay_images:
+            for i, img in enumerate(st.session_state.screenplay_images):
+                # Create placeholder images
+                placeholder = get_placeholder_image(400, 225, f"Scene {i+1}")
+                st.image(placeholder, caption=f"Scene {i+1}", use_column_width=True)
+        else:
+            st.info("Generate images from your screenplay to see previews here.")
+        
+        if st.session_state.screenplay_images and st.button("Proceed to Audio", key="screenplay_to_audio"):
+            go_to_audio_generator()
+
+# Main app logic
+def main():
+    render_sidebar()
     
-    with col3:
-        if st.button("Generate Video", use_container_width=True):
-            st.session_state.step = "video_generation"
-            st.rerun()
+    if st.session_state.page == "home":
+        render_home()
+    elif st.session_state.page == "script_generator":
+        render_script_generator()
+    elif st.session_state.page == "audio_generator":
+        render_audio_generator()
+    elif st.session_state.page == "video_generator":
+        render_video_generator()
+    elif st.session_state.page == "screenplay_generator":
+        render_screenplay_generator()
 
-# Main app logic based on current step
-# Main app logic stays the same, you just need to update the implementations
-# of render_briefer_page() and render_script_generation_page()
-if st.session_state.step == "start":
-    render_start_page()
-elif st.session_state.step == "briefer":
-    render_briefer_page()  # This is now chat-based
-elif st.session_state.step == "generate_script":
-    render_script_generation_page()  # This now uses your crew() function
-elif st.session_state.step == "edit_script":
-    render_script_editor_page()
-elif st.session_state.step == "audio_generation":
-    render_audio_generation_page()
-elif st.session_state.step == "video_generation":
-    render_video_generation_page()
-elif st.session_state.step == "image_generation":
-    render_image_generation_page()
-
-# Add footer
-st.markdown("---")
-st.markdown("#### AdGen AI Platform v0 | Beta Testing")
+if __name__ == "__main__":
+    main()
