@@ -443,7 +443,7 @@ def render_audio_generator():
             """
             
             # Place a hidden button that will be triggered by the JavaScript click
-            if st.button("", key=f"hidden_btn_{voice['id']}"):
+            if st.button("hello", key=f"hidden_btn_{voice['id']}"):
                 select_voice(voice["id"])
                 st.rerun()
             
