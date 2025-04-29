@@ -367,7 +367,7 @@ def render_script_generator():
                     if st.session_state.script:
                         st.session_state.script += "\n\n[Updated based on user feedback]"
                 
-                st.experimental_rerun()
+                st.rerun()
     
     with col2:
         st.markdown("<h3>Upload Your Script</h3>", unsafe_allow_html=True)
@@ -415,40 +415,36 @@ def render_audio_generator():
     # Display voice cards in a grid
     cols = st.columns(3)
     for i, voice in enumerate(voices):
-        with cols[i % 3]:
-            # Check if this voice is selected
-            is_selected = st.session_state.selected_voice == voice["id"]
-            card_class = "card card-selected" if is_selected else "card"
+        # Replace the current voice card rendering with this:
+with cols[i % 3]:
+    # Check if this voice is selected
+    is_selected = st.session_state.selected_voice == voice["id"]
+    card_class = "card card-selected" if is_selected else "card"
+    
+    # Create a container for the entire card
+    with st.container():
+        # Start of card content - use a div with padding for the card
+        st.markdown(f"""
+        <div class="{card_class}" style="padding-bottom: 0;">
+            <div class="card-title">{voice["name"]}</div>
+            <div style="margin-bottom: 15px;">
+                <span class="bubble">{voice["gender"]}</span>
+                <span class="bubble">{voice["style"]}</span>
+                <span class="bubble">{voice["language"]}</span>
+            </div>
             
-            with st.container():
-                st.markdown(f"""
-                <div class="{card_class}">
-                    <div class="card-title">{voice["name"]}</div>
-                    <div>
-                        <span class="bubble">{voice["gender"]}</span>
-                        <span class="bubble">{voice["style"]}</span>
-                        <span class="bubble">{voice["language"]}</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Audio preview inside the card container
-                audio_url = f"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3"
-                with st.container():
-                    # The negative margin helps embed it in the card visually
-                    st.markdown(f"""
-                    <div style="margin-top: -15px; margin-bottom: 10px; padding: 0 20px;">
-                        <audio controls style="width: 100%; height: 40px; margin-top: 10px;">
-                          <source src="{audio_url}" type="audio/mp3">
-                          Your browser does not support the audio element.
-                        </audio>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                # Select button - kept outside the card but visually connected
-                if st.button("Select" if not is_selected else "Selected", key=f"select_{voice['id']}"):
-                    select_voice(voice["id"])
-                    st.experimental_rerun()
+            <!-- Embed the audio player directly in the HTML -->
+            <audio controls style="width: 100%; margin-bottom: 15px;">
+                <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
+                Your browser does not support the audio element.
+            </audio>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # The select button sits just below the card
+        if st.button("Select" if not is_selected else "Selected", key=f"select_{voice['id']}"):
+            select_voice(voice["id"])
+            st.rerun()
     
     # Pagination controls
     st.markdown("<div class='pagination'>", unsafe_allow_html=True)
@@ -457,7 +453,7 @@ def render_audio_generator():
         if st.session_state.voice_page > 1:
             if st.button("← Previous", key="prev_voice_page"):
                 st.session_state.voice_page -= 1
-                st.experimental_rerun()
+                st.rerun()
                 
     with cols[1]:
         st.markdown(f"<p style='text-align: center;'>Page {st.session_state.voice_page} of {total_pages}</p>", unsafe_allow_html=True)
@@ -466,7 +462,7 @@ def render_audio_generator():
         if st.session_state.voice_page < total_pages:
             if st.button("Next →", key="next_voice_page"):
                 st.session_state.voice_page += 1
-                st.experimental_rerun()
+                st.rerun()
     
     st.markdown("</div>", unsafe_allow_html=True)
     
@@ -553,7 +549,7 @@ def render_video_generator():
             
             if st.button("Select" if not is_selected else "Selected", key=f"select_video_{style['id']}"):
                 select_video_style(style["id"])
-                st.experimental_rerun()
+                st.rerun()
     
     # Pagination controls
     st.markdown("<div class='pagination'>", unsafe_allow_html=True)
@@ -562,7 +558,7 @@ def render_video_generator():
         if st.session_state.video_page > 1:
             if st.button("← Previous", key="prev_video_page"):
                 st.session_state.video_page -= 1
-                st.experimental_rerun()
+                st.rerun()
                 
     with cols[1]:
         st.markdown(f"<p style='text-align: center;'>Page {st.session_state.video_page} of {total_pages}</p>", unsafe_allow_html=True)
@@ -571,7 +567,7 @@ def render_video_generator():
         if st.session_state.video_page < total_pages:
             if st.button("Next →", key="next_video_page"):
                 st.session_state.video_page += 1
-                st.experimental_rerun()
+                st.rerun()
     
     st.markdown("</div>", unsafe_allow_html=True)
     
