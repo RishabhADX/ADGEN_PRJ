@@ -416,37 +416,58 @@ def render_audio_generator():
     cols = st.columns(3)
 
     for i, voice in enumerate(voices):
-        with cols[i % 3]:
-            is_selected = st.session_state.selected_voice == voice["id"]
-            card_id = f"voice_card_{voice['id']}"
-            btn_id = f"select_btn_{voice['id']}"
-    
-            # Create the card with a positioned tick-box
-            card_html = f"""
-            <div class="voice-card" id="{card_id}">
-                <div class="tick-box" onclick="document.getElementById('{btn_id}').click()">
-                    {'✓' if is_selected else ''}
-                </div>
-                <div class="card-header">
-                    <div class="card-title">{voice["name"]}</div>
-                </div>
-                <div class="card-tags">
-                    <span class="bubble">{voice["gender"]}</span>
-                    <span class="bubble">{voice["style"]}</span>
-                    <span class="bubble">{voice["language"]}</span>
-                </div>
-                <audio controls style="width: 100%; margin-bottom: 10px;">
-                    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
-                    Your browser does not support the audio element.
-                </audio>
+    with cols[i % 3]:
+        is_selected = st.session_state.selected_voice == voice["id"]
+        card_id = f"voice_card_{voice['id']}"
+        btn_id = f"select_btn_{voice['id']}"  # same as HTML id
+
+        # Render the voice card with a clickable tick-box
+        card_html = f"""
+        <div class="voice-card" id="{card_id}">
+            <div class="tick-box" onclick="document.getElementById('{btn_id}').click()">
+                {'✓' if is_selected else ''}
             </div>
-            """
-            st.markdown(card_html, unsafe_allow_html=True)
-    
-            # Hidden button that gets triggered via JS
-            if st.button("", key=btn_id):
-                st.session_state.selected_voice = voice["id"]
-                st.rerun()
+            <div class="card-header">
+                <div class="card-title">{voice["name"]}</div>
+            </div>
+            <div class="card-tags">
+                <span class="bubble">{voice["gender"]}</span>
+                <span class="bubble">{voice["style"]}</span>
+                <span class="bubble">{voice["language"]}</span>
+            </div>
+            <audio controls style="width: 100%; margin-bottom: 10px;">
+                <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
+                Your browser does not support the audio element.
+            </audio>
+        </div>
+        """
+        st.markdown(card_html, unsafe_allow_html=True)
+
+        # 🔑 Hidden button right below, not in the HTML string
+        st.markdown(f"""<div style='display:none'>
+            <button id="{btn_id}"></button>
+        </div>""", unsafe_allow_html=True)
+
+        # 🔄 Use JS to simulate a button click in Streamlit
+        st.markdown(f"""
+        <script>
+        const btn = document.getElementById('{btn_id}');
+        if (btn) {{
+            btn.addEventListener('click', function() {{
+                const streamlitBtn = window.parent.document.querySelector('button[data-testid="stButton"][data-streamlit-key="{btn_id}"]');
+                if (streamlitBtn) {{
+                    streamlitBtn.click();
+                }}
+            }});
+        }}
+        </script>
+        """, unsafe_allow_html=True)
+
+        # 🎯 Actual Streamlit button (hidden from user)
+        if st.button("", key=btn_id):
+            st.session_state.selected_voice = voice["id"]
+            st.rerun()
+
     
     # Add CSS to style the tick-box
     st.markdown("""
