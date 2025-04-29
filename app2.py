@@ -415,55 +415,55 @@ def render_audio_generator():
     # Display voice cards in a grid
     cols = st.columns(3)
 
-for i, voice in enumerate(voices):
-    with cols[i % 3]:
-        is_selected = st.session_state.selected_voice == voice["id"]
-
-        # Card HTML with placeholder for button container
-        card_html = f"""
-        <div class="voice-card {'selected' if is_selected else ''}">
-            <div class="card-header">
-                <div class="card-title">{voice["name"]}</div>
-                <div class="selection-indicator">
-                    <div class="select-btn-container">
-                        <!-- Button will be placed here by Streamlit -->
+    for i, voice in enumerate(voices):
+        with cols[i % 3]:
+            is_selected = st.session_state.selected_voice == voice["id"]
+    
+            # Card HTML with placeholder for button container
+            card_html = f"""
+            <div class="voice-card {'selected' if is_selected else ''}">
+                <div class="card-header">
+                    <div class="card-title">{voice["name"]}</div>
+                    <div class="selection-indicator">
+                        <div class="select-btn-container">
+                            <!-- Button will be placed here by Streamlit -->
+                        </div>
                     </div>
                 </div>
+                <div class="card-tags">
+                    <span class="bubble">{voice["gender"]}</span>
+                    <span class="bubble">{voice["style"]}</span>
+                    <span class="bubble">{voice["language"]}</span>
+                </div>
+                <audio controls style="width: 100%; margin-bottom: 10px;">
+                    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
+                    Your browser does not support the audio element.
+                </audio>
             </div>
-            <div class="card-tags">
-                <span class="bubble">{voice["gender"]}</span>
-                <span class="bubble">{voice["style"]}</span>
-                <span class="bubble">{voice["language"]}</span>
-            </div>
-            <audio controls style="width: 100%; margin-bottom: 10px;">
-                <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
-                Your browser does not support the audio element.
-            </audio>
-        </div>
-        """
-
-        st.markdown(card_html, unsafe_allow_html=True)
-
-        # Button styled to appear at top-right (absolute)
-        btn_container_id = f"select_btn_{voice['id']}_container"
-        with st.container():
-            st.markdown(f"""
-            <style>
-            #{btn_container_id} {{
-                position: absolute;
-                top: 10px;
-                right: 10px;
-                z-index: 10;
-            }}
-            </style>
-            <div id="{btn_container_id}">
-            """, unsafe_allow_html=True)
-
-            if st.button("✓" if is_selected else "Select", key=f"select_btn_{voice['id']}", help="Click to select this voice"):
-                st.session_state.selected_voice = voice["id"]
-                st.rerun()
-
-            st.markdown("</div>", unsafe_allow_html=True)
+            """
+    
+            st.markdown(card_html, unsafe_allow_html=True)
+    
+            # Button styled to appear at top-right (absolute)
+            btn_container_id = f"select_btn_{voice['id']}_container"
+            with st.container():
+                st.markdown(f"""
+                <style>
+                #{btn_container_id} {{
+                    position: absolute;
+                    top: 10px;
+                    right: 10px;
+                    z-index: 10;
+                }}
+                </style>
+                <div id="{btn_container_id}">
+                """, unsafe_allow_html=True)
+    
+                if st.button("✓" if is_selected else "Select", key=f"select_btn_{voice['id']}", help="Click to select this voice"):
+                    st.session_state.selected_voice = voice["id"]
+                    st.rerun()
+    
+                st.markdown("</div>", unsafe_allow_html=True)
     
     # Add CSS for the voice cards
     st.markdown("""
