@@ -431,8 +431,6 @@ def render_audio_generator():
                         <span class="bubble">{voice["gender"]}</span>
                         <span class="bubble">{voice["style"]}</span>
                         <span class="bubble">{voice["language"]}</span>
-                    </div>
-                    
                     <!-- Embed the audio player directly in the HTML -->
                     <audio controls style="width: 100%; margin-bottom: 15px;">
                         <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
