@@ -420,24 +420,35 @@ def render_audio_generator():
             is_selected = st.session_state.selected_voice == voice["id"]
             card_class = "card card-selected" if is_selected else "card"
             
-            st.markdown(f"""
-            <div class="{card_class}">
-                <div class="card-title">{voice["name"]}</div>
-                <div>
-                    <span class="bubble">{voice["gender"]}</span>
-                    <span class="bubble">{voice["style"]}</span>
-                    <span class="bubble">{voice["language"]}</span>
+            with st.container():
+                st.markdown(f"""
+                <div class="{card_class}">
+                    <div class="card-title">{voice["name"]}</div>
+                    <div>
+                        <span class="bubble">{voice["gender"]}</span>
+                        <span class="bubble">{voice["style"]}</span>
+                        <span class="bubble">{voice["language"]}</span>
+                    </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Audio preview
-            st.audio(f"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3", format="audio/mp3")
-            
-            # Select button
-            if st.button("Select" if not is_selected else "Selected", key=f"select_{voice['id']}"):
-                select_voice(voice["id"])
-                st.experimental_rerun()
+                """, unsafe_allow_html=True)
+                
+                # Audio preview inside the card container
+                audio_url = f"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3"
+                with st.container():
+                    # The negative margin helps embed it in the card visually
+                    st.markdown(f"""
+                    <div style="margin-top: -15px; margin-bottom: 10px; padding: 0 20px;">
+                        <audio controls style="width: 100%; height: 40px; margin-top: 10px;">
+                          <source src="{audio_url}" type="audio/mp3">
+                          Your browser does not support the audio element.
+                        </audio>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                # Select button - kept outside the card but visually connected
+                if st.button("Select" if not is_selected else "Selected", key=f"select_{voice['id']}"):
+                    select_voice(voice["id"])
+                    st.experimental_rerun()
     
     # Pagination controls
     st.markdown("<div class='pagination'>", unsafe_allow_html=True)
