@@ -603,25 +603,20 @@ elif st.session_state.step == 4:
             video_length = st.slider("Video Length (seconds)", 15, 60, 30)
             aspect_ratio = st.selectbox("Aspect Ratio", ["16x9", "1x1", "9x16"])
 
-        # Replace the voice selection section with this paginated version
+        # Simplified voice selection with direct radio buttons and audio players
 
-        # Fixed Voice Selection Section with properly saved selection
-
-        # Complete fixed voice selection section with proper ID handling
-
-        # Completely redesigned voice selection using radio buttons
-
-        # FIXED Voice Selection Section with Radio Buttons
+        # FIXED Voice Selection Section
         st.subheader("Select Voice")
         
         # Get voices with their preview URLs
         voices = get_voices()
         
-        # Initialize pagination state for each language if not already present
-        if 'voice_pagination' not in st.session_state:
-            st.session_state.voice_pagination = {}
+        # Initialize session state for voice selection if not present
+        if 'selected_voice' not in st.session_state:
+            st.session_state.selected_voice = ""
+            st.session_state.selected_voice_name = ""
         
-        # Create voice selection section with embedded audio players and pagination
+        # Create voice selection section with embedded audio players
         if not voices:
             st.warning("No voices available")
         else:
@@ -636,85 +631,54 @@ elif st.session_state.step == 4:
             # Sort languages alphabetically
             sorted_languages = sorted(voice_by_language.keys())
             
-            # Initialize pagination for any new languages
-            for lang in sorted_languages:
-                if lang not in st.session_state.voice_pagination:
-                    st.session_state.voice_pagination[lang] = 0
-            
             # Create tabs for different language groups
             if sorted_languages:
                 tabs = st.tabs(sorted_languages)
-                
-                # Prepare a list of all voice options for radio selection
-                all_voice_options = {}
                 
                 for tab_idx, lang in enumerate(sorted_languages):
                     with tabs[tab_idx]:
                         lang_voices = voice_by_language[lang]
                         
-                        # Create a list of voice options for this language
-                        voice_options = {}
+                        # Display voices with radio buttons and audio players
+                        st.write("#### Select a voice from this language:")
+                        
+                        # Create radio options for this language
+                        voice_options = []
                         for voice in lang_voices:
-                            voice_id = voice.get("voice_id", "")
                             voice_name = voice.get("name", "Unnamed")
-                            if voice_id:
-                                # Store as ID: Name pairs
-                                voice_options[voice_id] = voice_name
+                            voice_options.append(voice_name)
                         
-                        # Add to the global voice options
-                        all_voice_options.update(voice_options)
+                        # Find the index of the currently selected voice in this language
+                        selected_index = 0  # Default to first option
                         
-                        # Pagination settings
-                        voices_per_page = 3  # Show 3 voices per page
-                        total_pages = (len(lang_voices) + voices_per_page - 1) // voices_per_page
+                        if st.session_state.selected_voice:
+                            # Try to find the index of the selected voice in this language tab
+                            for i, voice in enumerate(lang_voices):
+                                if voice.get("voice_id") == st.session_state.selected_voice:
+                                    selected_index = i
+                                    break
                         
-                        # Start and end indices for current page
-                        current_page = st.session_state.voice_pagination[lang]
-                        start_idx = current_page * voices_per_page
-                        end_idx = min(start_idx + voices_per_page, len(lang_voices))
-                        
-                        # Display current page range info
-                        st.markdown(f"**Showing voices {start_idx+1}-{end_idx} of {len(lang_voices)}**")
-                        
-                        # Radio button for voice selection
-                        voice_ids = [voice.get("voice_id", "") for voice in lang_voices[start_idx:end_idx]]
-                        voice_names = [voice.get("name", "Unnamed") for voice in lang_voices[start_idx:end_idx]]
-                        
-                        # Create radio options dict with ID: Name
-                        radio_options = {voice_id: f"{name}" for voice_id, name in zip(voice_ids, voice_names) if voice_id}
-                        
-                        # Use an empty string as the default if no voice is selected
-                        if 'selected_voice' not in st.session_state:
-                            st.session_state.selected_voice = ""
+                        # Create a radio button group for selection
+                        # Only show if we have options
+                        if voice_options:
+                            selected_voice_name = st.radio(
+                                "Select a voice:",
+                                options=voice_options,
+                                index=selected_index,
+                                key=f"voice_select_{lang}"
+                            )
                             
-                        # Convert to list of labels for the radio buttons
-                        radio_labels = list(radio_options.values())
-                        radio_ids = list(radio_options.keys())
-                        
-                        # Find the index of the selected voice in the current page options, default to 0 if not found
-                        selected_index = 0
-                        if st.session_state.selected_voice in radio_ids:
-                            selected_index = radio_ids.index(st.session_state.selected_voice)
-                        
-                        # Create the radio button
-                        selected_voice_name = st.radio(
-                            "Select a voice:",
-                            radio_labels,
-                            index=selected_index,
-                            key=f"voice_select_{lang}_{current_page}"
-                        )
-                        
-                        # Update the selected voice ID based on the selection
-                        if selected_voice_name:
-                            # Find the voice ID that corresponds to the selected name
-                            for voice_id, name in radio_options.items():
-                                if name == selected_voice_name:
-                                    st.session_state.selected_voice = voice_id
+                            # Find the voice ID for the selected name and update selection
+                            for voice in lang_voices:
+                                if voice.get("name") == selected_voice_name:
+                                    st.session_state.selected_voice = voice.get("voice_id", "")
                                     st.session_state.selected_voice_name = selected_voice_name
+                                    break
+                        else:
+                            st.warning("No voices available in this language.")
                         
-                        # Display the voices with audio players
-                        for voice_idx in range(start_idx, end_idx):
-                            voice = lang_voices[voice_idx]
+                        # Display each voice with its audio player
+                        for voice in lang_voices:
                             voice_id = voice.get("voice_id", "")
                             voice_name = voice.get("name", "Unnamed")
                             voice_gender = voice.get("gender", "Unspecified")
@@ -727,7 +691,7 @@ elif st.session_state.step == 4:
                                 preview_url = accents[0].get("preview_url", "")
                                 accent_name = accents[0].get("accent_name", "")
                             
-                            # Check if this is the currently selected voice
+                            # Check if this is the selected voice
                             is_selected = st.session_state.selected_voice == voice_id
                             
                             # Create a card for each voice
@@ -764,46 +728,11 @@ elif st.session_state.step == 4:
                                 
                                 # Add separator between voices
                                 st.markdown("---")
-                        
-                        # Pagination navigation
-                        if total_pages > 1:
-                            col1, col2, col3 = st.columns([1, 3, 1])
-                            
-                            with col1:
-                                if current_page > 0:
-                                    if st.button("← Previous", key=f"prev_{lang}"):
-                                        st.session_state.voice_pagination[lang] = current_page - 1
-                                        st.rerun()
-                            
-                            with col2:
-                                # Page selector - dropdown to jump to specific page
-                                page_options = [f"Page {i+1} of {total_pages}" for i in range(total_pages)]
-                                selected_page = st.selectbox(
-                                    "Go to page:", 
-                                    page_options, 
-                                    index=current_page,
-                                    key=f"page_select_{lang}"
-                                )
-                                # Extract page number from selection and update if changed
-                                selected_page_num = int(selected_page.split()[1]) - 1
-                                if selected_page_num != current_page:
-                                    st.session_state.voice_pagination[lang] = selected_page_num
-                                    st.rerun()
-                            
-                            with col3:
-                                if current_page < total_pages - 1:
-                                    if st.button("Next →", key=f"next_{lang}"):
-                                        st.session_state.voice_pagination[lang] = current_page + 1
-                                        st.rerun()
             
-            # Display currently selected voice with clearer indication
+            # Display currently selected voice with clear feedback
             if st.session_state.selected_voice:
-                # Find the full name from our options
-                selected_name = st.session_state.selected_voice_name
-                selected_id = st.session_state.selected_voice
-                
-                st.success(f"Selected voice: {selected_name}")
-                st.info(f"Voice ID: {selected_id} (This ID will be used for video creation)")
+                st.success(f"Selected voice: {st.session_state.selected_voice_name}")
+                st.info(f"Voice ID: {st.session_state.selected_voice}")
                 
                 # Voice volume slider
                 st.session_state.voice_volume = st.slider("Voice Volume", 0.0, 1.0, 0.5, 0.1)
