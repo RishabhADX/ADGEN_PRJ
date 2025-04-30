@@ -6,14 +6,15 @@ from PIL import Image
 import io
 import time
 # Add at the top with other imports
-from pydantic import BaseModel
-from typing import List, Optional
 from google import genai
 from google.genai import types
+from PIL import Image
+from io import BytesIO
+import base64
+import uuid
 from imagekitio import ImageKit
 import requests
 import json
-import uuid
 
 # Set page configuration
 st.set_page_config(
