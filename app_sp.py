@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import base64
 from PIL import Image
@@ -218,23 +217,15 @@ def select_video_style(style_id):
     st.session_state.selected_video_style = style_id
 
 # Actual AI functions (Implementation from your first code snippet)
-def screen_crew():
-    from pydantic import BaseModel
-    from typing import List, Optional
-    
-    # This is where you'd put your crew agent code
-    # For the purposes of this demonstration, we'll simulate the output
-    
-    # Simulated output structure
-    class ScriptOutput:
-        def __init__(self):
-            self.title = "Finding Your Financial Freedom"
-            self.style = "screenplay"
-            self.hook = "A person overwhelmed by bills and financial stress."
-            self.body = "They discover a professional debt solution service."
-            self.cta = "Take the first step toward financial freedom."
-            self.final_script = "You're not alone... Financial stress is affecting so many. Real help for real debt. Professional, confidential support awaits. Take the first step... Start your free debt review today."
-            self.screenplay = """
+class ScriptOutput:
+    def __init__(self):
+        self.title = "Finding Your Financial Freedom"
+        self.style = "screenplay"
+        self.hook = "A person overwhelmed by bills and financial stress."
+        self.body = "They discover a professional debt solution service."
+        self.cta = "Take the first step toward financial freedom."
+        self.final_script = "You're not alone... Financial stress is affecting so many. Real help for real debt. Professional, confidential support awaits. Take the first step... Start your free debt review today."
+        self.screenplay = """
 FADE IN:
 
 INT. LIVING ROOM - NIGHT
@@ -275,28 +266,24 @@ JANE
 Start your free debt review today.
 
 FADE OUT.
-            """
-            self.image_prompts = [
-                "Close-up of a worried woman in her 30s sitting at a kitchen table at night, surrounded by bills and notices, face illuminated by lamp light, shoulders slumped in stress",
-                
-                "Professional modern office setting with sunlight streaming through windows, a compassionate financial advisor in business attire reviewing documents with a relieved client, desk has organized folders and a computer",
-                
-                "Close-up of a computer screen showing a colorful debt reduction graph with downward trending lines, professional desktop setting, office environment",
-                
-                "Same woman from first scene, now sitting at a neat kitchen table with organized financial documents in labeled folders, checking items off a list, expression hopeful and relieved, warmer lighting"
-            ]
+        """
+        self.image_prompts = [
+            "Close-up of a worried woman in her 30s sitting at a kitchen table at night, surrounded by bills and notices, face illuminated by lamp light, shoulders slumped in stress",
             
+            "Professional modern office setting with sunlight streaming through windows, a compassionate financial advisor in business attire reviewing documents with a relieved client, desk has organized folders and a computer",
+            
+            "Close-up of a computer screen showing a colorful debt reduction graph with downward trending lines, professional desktop setting, office environment",
+            
+            "Same woman from first scene, now sitting at a neat kitchen table with organized financial documents in labeled folders, checking items off a list, expression hopeful and relieved, warmer lighting"
+        ]
+
+def screen_crew():
     # Return simulated output
     return ScriptOutput()
 
-# Function to generate images using Google Gemini (simplified)
-def generate_gemini_images(prompts, api_key="AIzaSyBLzfjImenFp60acvXgKygaEDKGqKfHyKI"):
-    from google import genai
-    from google.genai import types
-    
-    # Initialize the Google Gemini client
-    client = genai.Client(api_key=api_key)
-    
+# Function to generate images using Google Gemini (simplified for mock)
+def generate_gemini_images(prompts, api_key="YOUR_API_KEY"):
+    # For demonstration purposes - in real deployment you'd use the actual API
     image_paths = []
     
     with st.spinner("Generating images from screenplay scenes..."):
@@ -307,35 +294,17 @@ def generate_gemini_images(prompts, api_key="AIzaSyBLzfjImenFp60acvXgKygaEDKGqKf
             status_text.text(f"Processing image {i+1}/{len(prompts)}")
             
             try:
-                # Generate content using Gemini API
-                response = client.models.generate_content(
-                    model="gemini-2.0-flash-exp-image-generation",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=['TEXT', 'IMAGE']
-                    )
-                )
+                # Create a placeholder image instead of using the API
+                placeholder = Image.new('RGB', (400, 300), color=(173, 216, 230))
+                img_byte_arr = BytesIO()
+                placeholder.save(img_byte_arr, format='PNG')
+                img_byte_arr.seek(0)
                 
-                # Process response
-                for part in response.candidates[0].content.parts:
-                    if hasattr(part, "inline_data"):
-                        # Save the generated image
-                        filename = f"scene-{i+1:02d}-gemini-image.png"
-                        image_data = part.inline_data.data
-                        
-                        # Create PIL Image
-                        image = Image.open(BytesIO(image_data))
-                        
-                        # Save to BytesIO for display in Streamlit
-                        img_byte_arr = BytesIO()
-                        image.save(img_byte_arr, format='PNG')
-                        img_byte_arr.seek(0)
-                        
-                        # Display image in Streamlit
-                        st.image(img_byte_arr, caption=f"Scene {i+1}", use_column_width=True)
-                        
-                        # Add to images list
-                        image_paths.append((filename, img_byte_arr))
+                # Display image in Streamlit
+                st.image(img_byte_arr, caption=f"Scene {i+1}", use_column_width=True)
+                
+                # Add to images list
+                image_paths.append((f"scene-{i+1:02d}.png", img_byte_arr))
             
             except Exception as e:
                 st.error(f"Error generating image {i+1}: {str(e)}")
@@ -354,17 +323,9 @@ def generate_gemini_images(prompts, api_key="AIzaSyBLzfjImenFp60acvXgKygaEDKGqKf
     
     return image_paths
 
-# Function to upload images to ImageKit
+# Function to upload images to ImageKit (mock)
 def upload_to_imagekit(image_data_list):
-    from imagekitio import ImageKit
-    
-    # Initialize the ImageKit client
-    imagekit = ImageKit(
-        private_key='private_OGgux+C54n9PIYDlLdOrYysEWrw=',
-        public_key='public_Qq9s197rBPKyx5eWhq+aN6TQ3Iw=',
-        url_endpoint='https://ik.imagekit.io/b6pq3mgo7'
-    )
-    
+    # Mock function - in real deployment you'd use the actual API
     image_urls = []
     file_ids = []
     
@@ -373,14 +334,12 @@ def upload_to_imagekit(image_data_list):
         
         for i, (filename, img_data) in enumerate(image_data_list):
             try:
-                img_data.seek(0)
-                upload = imagekit.upload(
-                    file=img_data,
-                    file_name=filename
-                )
+                # Create mock URL
+                mock_url = f"https://example.com/images/{filename}"
+                mock_id = f"file_{i}"
                 
-                image_urls.append(upload.url)
-                file_ids.append(upload.file_id)
+                image_urls.append(mock_url)
+                file_ids.append(mock_id)
                 
                 progress_bar.progress((i + 1) / len(image_data_list))
                 
@@ -393,135 +352,50 @@ def upload_to_imagekit(image_data_list):
     
     return image_urls, file_ids
 
-# Function to create Creatify link
+# Function to create Creatify link (mock)
 def create_creatify_link(image_urls, title="AI Generated Screenplay Images"):
-    # API credentials
-    headers = {
-        "X-API-ID": "5f8b3a5c-6e33-4e9f-b85c-71941d675270",
-        "X-API-KEY": "c019dd017d22e2e40627f87bc86168b631b9a345",
-        "Content-Type": "application/json"
-    }
-    
-    # Filter out None values
-    valid_urls = [url for url in image_urls if url is not None]
-    
-    if not valid_urls:
-        st.error("No valid image URLs to create a link")
-        return None
-    
-    # Prepare payload
-    creatify_url = "https://api.creatify.ai/api/links/link_with_params/"
-    payload = {
-        "title": title,
-        "description": "Screenplay scenes generated with AI",
-        "image_urls": valid_urls,
-        "video_urls": [],
-        "reviews": title  # Using title as reviews
-    }
-    
-    try:
-        with st.spinner("Creating link to images..."):
-            response = requests.request("POST", creatify_url, json=payload, headers=headers)
-            if response.status_code == 200:
-                json_response = response.json()
-                if 'url' in json_response:
-                    return json_response
-            else:
-                st.error(f"Error creating link: {response.text}")
-                return None
-    except Exception as e:
-        st.error(f"Error making API request: {str(e)}")
-        return None
+    # Mock function - in real deployment you'd use the actual API
+    with st.spinner("Creating link to images..."):
+        time.sleep(1)
+        mock_response = {
+            "link": {
+                "id": "mock-link-id",
+                "url": "https://example.com/view/mock-link"
+            }
+        }
+        return mock_response
 
-# Function to create video from screenplay and images
+# Function to create video from screenplay and images (mock)
 def create_creatify_video(screenplay_script, override_avatar=None):
-    # API credentials
-    headers = {
-        "X-API-ID": "5f8b3a5c-6e33-4e9f-b85c-71941d675270",
-        "X-API-KEY": "c019dd017d22e2e40627f87bc86168b631b9a345",
-        "Content-Type": "application/json"
-    }
-    
-    # For the link ID, use the link from the previous step or a default one
-    link_id = "9a98f404-f3d9-4f74-b452-f73013be938f"  # Default, replace with actual link ID if available
-    if st.session_state.creatify_link and 'id' in st.session_state.creatify_link.get('link', {}):
-        link_id = st.session_state.creatify_link['link']['id']
-    
-    # Set the avatar ID or use default
-    avatar_id = override_avatar if override_avatar else "a7a240e8-efbf-4ab5-a02d-0f367a810875"
-    
-    # Prepare the payload
-    url = "https://api.creatify.ai/api/link_to_videos/"
-    payload = {
-        "name": "AI Generated Screenplay",
-        "target_platform": "Facebook",
-        "target_audience": "General Audience",
-        "language": "en",
-        "video_length": 30,
-        "aspect_ratio": "16x9",
-        "visual_style": "GreenScreenEffectTemplate",
-        "override_avatar": avatar_id,
-        "override_script": screenplay_script,
-        "voiceover_volume": 0.5,
-        "link": link_id,
-        "no_background_music": True,
-        "caption_style": "normal-black",
-    }
-    
-    try:
-        with st.spinner("Initiating video creation..."):
-            response = requests.request("POST", url, json=payload, headers=headers)
-            if response.status_code in [200, 201]:
-                return response.json()
-            else:
-                st.error(f"Error creating video: {response.text}")
-                return None
-    except Exception as e:
-        st.error(f"Error making API request: {str(e)}")
-        return None
+    # Mock function - in real deployment you'd use the actual API
+    with st.spinner("Initiating video creation..."):
+        time.sleep(1)
+        mock_response = {
+            "id": "mock-video-job-id",
+            "status": "pending"
+        }
+        return mock_response
 
-# Function to check video status
+# Function to check video status (mock)
 def check_video_status(video_id):
-    # API credentials
-    headers = {
-        "X-API-ID": "5f8b3a5c-6e33-4e9f-b85c-71941d675270",
-        "X-API-KEY": "c019dd017d22e2e40627f87bc86168b631b9a345",
+    # Mock function - in real deployment you'd use the actual API
+    mock_response = {
+        "id": video_id,
+        "status": "ready",
+        "video_url": "https://example.com/videos/mock-video.mp4"
     }
-    
-    url = f"https://api.creatify.ai/api/link_to_videos/{video_id}/"
-    
-    try:
-        response = requests.request("GET", url, headers=headers)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            st.error(f"Error checking video status: {response.text}")
-            return None
-    except Exception as e:
-        st.error(f"Error making API request: {str(e)}")
-        return None
+    return mock_response
 
-# Function to render the video
+# Function to render the video (mock)
 def render_video(video_id):
-    # API credentials
-    headers = {
-        "X-API-ID": "5f8b3a5c-6e33-4e9f-b85c-71941d675270",
-        "X-API-KEY": "c019dd017d22e2e40627f87bc86168b631b9a345",
-    }
-    
-    url = f"https://api.creatify.ai/api/link_to_videos/{video_id}/render/"
-    
-    try:
-        with st.spinner("Rendering final video..."):
-            response = requests.request("POST", url, headers=headers)
-            if response.status_code == 200:
-                return response.json()
-            else:
-                st.error(f"Error rendering video: {response.text}")
-                return None
-    except Exception as e:
-        st.error(f"Error making API request: {str(e)}")
-        return None
+    # Mock function - in real deployment you'd use the actual API
+    with st.spinner("Rendering final video..."):
+        time.sleep(2)
+        mock_response = {
+            "id": video_id,
+            "status": "rendering"
+        }
+        return mock_response
 
 # Sample data (would be replaced with actual API calls)
 def get_voice_samples(page=1, per_page=6):
@@ -572,7 +446,12 @@ def get_placeholder_image(width, height, text="Preview"):
 # UI Components
 def render_sidebar():
     with st.sidebar:
-        st.image("https://via.placeholder.com/150x150.png?text=AI+Suite", width=150)
+        st.write("AI Creative Suite")  # Fallback if image isn't available
+        try:
+            st.image("https://via.placeholder.com/150x150.png?text=AI+Suite", width=150)
+        except:
+            pass
+            
         st.markdown("### Navigation")
         
         if st.button("🏠 Home", key="nav_home"):
@@ -719,9 +598,13 @@ def render_script_generator():
         
         if uploaded_file is not None:
             # In a real implementation, you would parse the file content
-            file_content = uploaded_file.getvalue().decode("utf-8") if uploaded_file.type == "text/plain" else "Script content from uploaded file"
-            st.session_state.script = file_content
-            st.success(f"Uploaded script: {uploaded_file.name}")
+            try:
+                file_content = uploaded_file.getvalue().decode("utf-8") if uploaded_file.type == "text/plain" else "Script content from uploaded file"
+                st.session_state.script = file_content
+                st.success(f"Uploaded script: {uploaded_file.name}")
+            except Exception as e:
+                st.error(f"Error reading file: {str(e)}")
+                st.session_state.script = f"Sample script content from {uploaded_file.name}"
         
         # Preview area
         st.markdown("---")
@@ -760,30 +643,126 @@ def render_audio_generator():
     for i, voice in enumerate(voices):
         with cols[i % 3]:
             is_selected = st.session_state.selected_voice == voice["id"]
-            card_id = f"voice_card_{voice['id']}"
-    
-            # Create the card
-            card_html = f"""
-            <div class="voice-card {'selected' if is_selected else ''}">
-                <div class="card-header">
-                    <div class="card-title">{voice["name"]}</div>
-                    <div class="selection-indicator">{'✓' if is_selected else ''}</div>
-                </div>
-                <div class="card-tags">
-                    <span class="bubble">{voice["gender"]}</span>
-                    <span class="bubble">{voice["style"]}</span>
-                    <span class="bubble">{voice["language"]}</span>
-                </div>
-                <audio controls style="width: 100%; margin-bottom: 10px;">
-                    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
-                    Your browser does not support the audio element.
-                </audio>
-            </div>
-            """
-    
-            st.markdown(card_html, unsafe_allow_html=True)
+            
+            # Create voice card with simpler approach
+            st.markdown(f"### {voice['name']}")
+            st.markdown(f"**Gender:** {voice['gender']} | **Style:** {voice['style']} | **Language:** {voice['language']}")
+            
+            # Use an image as placeholder for audio
+            audio_placeholder = get_placeholder_image(300, 50, "Audio Waveform")
+            st.image(audio_placeholder, caption=f"Sample Audio for {voice['name']}")
     
             # Button to select this voice
             if st.button(f"Select {voice['name']}", key=f"select_btn_{voice['id']}"):
                 st.session_state.selected_voice = voice["id"]
                 st.rerun()
+    
+    # Pagination
+    st.markdown("<div class='pagination'>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col1:
+        if st.session_state.voice_page > 1:
+            if st.button("Previous", key="prev_voices"):
+                st.session_state.voice_page -= 1
+                st.rerun()
+    
+    with col2:
+        st.markdown(f"<p style='text-align: center;'>Page {st.session_state.voice_page} of {total_pages}</p>", unsafe_allow_html=True)
+    
+    with col3:
+        if st.session_state.voice_page < total_pages:
+            if st.button("Next", key="next_voices"):
+                st.session_state.voice_page += 1
+                st.rerun()
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Script preview and Generate button
+    st.markdown("---")
+    st.markdown("<h3>Script Preview</h3>", unsafe_allow_html=True)
+    
+    st.text_area("Script to convert to audio:", value=st.session_state.script, height=200, key="audio_script_preview", disabled=True)
+    
+    if st.session_state.selected_voice:
+        if st.button("Generate Audio", key="gen_audio_btn"):
+            with st.spinner("Generating audio..."):
+                # Simulate audio generation
+                time.sleep(2)
+                st.session_state.generated_audio = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+                st.success("Audio generated successfully!")
+    else:
+        st.warning("Please select a voice first.")
+    
+    # Audio preview
+    if st.session_state.generated_audio:
+        st.markdown("<h3>Generated Audio</h3>", unsafe_allow_html=True)
+        st.audio(st.session_state.generated_audio)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Download button would be implemented here
+            if st.button("Download Audio"):
+                st.success("Audio downloaded successfully!")
+        
+        with col2:
+            if st.button("Proceed to Video Creator"):
+                go_to_video_generator()
+
+def render_video_generator():
+    st.markdown("<h1 class='main-header'>Video Generator</h1>", unsafe_allow_html=True)
+    
+    if not st.session_state.script:
+        st.warning("You need a script first. Please generate or upload a script.")
+        if st.button("Go to Script Generator"):
+            go_to_script_generator()
+        return
+    
+    # Video style selection area
+    st.markdown("<h3>Select a Video Style</h3>", unsafe_allow_html=True)
+    
+    # Get paginated video styles
+    styles, total_styles = get_video_styles(page=st.session_state.video_page)
+    total_pages = (total_styles + 5) // 6  # 6 items per page, rounded up
+    
+    # Display style cards in a grid
+    cols = st.columns(3)
+    for i, style in enumerate(styles):
+        with cols[i % 3]:
+            is_selected = st.session_state.selected_video_style == style["id"]
+            
+            # Create style card
+            st.markdown(f"### {style['name']}")
+            st.markdown(f"{style['description']}")
+            
+            # Use a placeholder for video preview
+            video_placeholder = get_placeholder_image(300, 200, f"Style {style['id']} Preview")
+            st.image(video_placeholder, caption=f"Preview of {style['name']}")
+    
+            # Button to select this style
+            if st.button(f"Select {style['name']}", key=f"select_style_{style['id']}"):
+                st.session_state.selected_video_style = style["id"]
+                st.rerun()
+    
+    # Pagination
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col1:
+        if st.session_state.video_page > 1:
+            if st.button("Previous", key="prev_styles"):
+                st.session_state.video_page -= 1
+                st.rerun()
+    
+    with col2:
+        st.markdown(f"<p style='text-align: center;'>Page {st.session_state.video_page} of {total_pages}</p>", unsafe_allow_html=True)
+    
+    with col3:
+        if st.session_state.video_page < total_pages:
+            if st.button("Next", key="next_styles"):
+                st.session_state.video_page += 1
+                st.rerun()
+    
+    # Video generation section
+    st.markdown("---")
+    st.markdown("<h3>Generate Video</h3>", unsafe_allow_html=True)
