@@ -1,13 +1,19 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import base64
 from PIL import Image
 import io
 import time
+# Add at the top with other imports
+from pydantic import BaseModel
+from typing import List, Optional
+from google import genai
+from google.genai import types
+from imagekitio import ImageKit
 import requests
 import json
 import uuid
-from io import BytesIO
 
 # Set page configuration
 st.set_page_config(
@@ -107,56 +113,25 @@ st.markdown(f"""
         font-weight: 600;
         margin-bottom: 20px;
     }}
-    .voice-card {{
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 15px;
-        margin-bottom: 15px;
-        transition: all 0.3s ease;
-        cursor: pointer;
-        position: relative;
-    }}
-    
-    .voice-card:hover {{
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        transform: translateY(-2px);
-    }}
-    
-    .voice-card.selected {{
-        border: 2px solid #4CAF50;
-        background-color: rgba(76, 175, 80, 0.05);
-    }}
-    
-    .card-header {{
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
-    }}
-    
-    .card-title {{
-        font-weight: bold;
-        font-size: 1.1em;
-    }}
-    
-    .selection-indicator {{
-        color: #4CAF50;
-        font-weight: bold;
-        font-size: 1.2em;
-    }}
-    
-    .card-tags {{
-        margin-bottom: 15px;
-    }}
-    
-    .loading-spinner {{
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100px;
-    }}
 </style>
 """, unsafe_allow_html=True)
+# Add after st.set_page_config()
+# Initialize the Google Gemini client
+client = genai.Client(api_key="AIzaSyBLzfjImenFp60acvXgKygaEDKGqKfHyKI")
+
+# Initialize the ImageKit client
+imagekit = ImageKit(
+    private_key='private_OGgux+C54n9PIYDlLdOrYysEWrw=',
+    public_key='public_Qq9s197rBPKyx5eWhq+aN6TQ3Iw=',
+    url_endpoint='https://ik.imagekit.io/b6pq3mgo7'
+)
+
+# Creatify API headers
+creatify_headers = {
+    "X-API-ID": "5f8b3a5c-6e33-4e9f-b85c-71941d675270",
+    "X-API-KEY": "c019dd017d22e2e40627f87bc86168b631b9a345",
+    "Content-Type": "application/json"
+}
 
 # Initialize session state variables
 if 'page' not in st.session_state:
@@ -179,16 +154,17 @@ if 'video_page' not in st.session_state:
     st.session_state.video_page = 1
 if 'screenplay_images' not in st.session_state:
     st.session_state.screenplay_images = []
-if 'screenplay_data' not in st.session_state:
-    st.session_state.screenplay_data = None
-if 'image_urls' not in st.session_state:
-    st.session_state.image_urls = []
+# Add to the session state initialization
+if 'image_prompts' not in st.session_state:
+    st.session_state.image_prompts = []
+if 'generated_image_urls' not in st.session_state:
+    st.session_state.generated_image_urls = []
 if 'creatify_link' not in st.session_state:
     st.session_state.creatify_link = None
-if 'video_output_url' not in st.session_state:
-    st.session_state.video_output_url = None
-if 'video_job_id' not in st.session_state:
-    st.session_state.video_job_id = None
+if 'creatify_video_id' not in st.session_state:
+    st.session_state.creatify_video_id = None
+if 'brief' not in st.session_state:
+    st.session_state.brief = ""
 
 # Navigation functions
 def go_to_home():
@@ -215,188 +191,49 @@ def select_voice(voice_id):
 
 def select_video_style(style_id):
     st.session_state.selected_video_style = style_id
-
-# Actual AI functions (Implementation from your first code snippet)
-class ScriptOutput:
-    def __init__(self):
-        self.title = "Finding Your Financial Freedom"
-        self.style = "screenplay"
-        self.hook = "A person overwhelmed by bills and financial stress."
-        self.body = "They discover a professional debt solution service."
-        self.cta = "Take the first step toward financial freedom."
-        self.final_script = "You're not alone... Financial stress is affecting so many. Real help for real debt. Professional, confidential support awaits. Take the first step... Start your free debt review today."
-        self.screenplay = """
-FADE IN:
-
-INT. LIVING ROOM - NIGHT
-
-JANE (30s) sits at her kitchen table, surrounded by bills, her face etched with worry. She rubs her temples, overwhelmed.
-
-JANE (V.O.)
-You're not alone...
-
-She looks at her phone showing overdue payment notifications.
-
-JANE (V.O.)
-Financial stress is affecting so many.
-
-INT. PROFESSIONAL OFFICE - DAY
-
-Jane sits across from a FINANCIAL ADVISOR, who reviews her documents with understanding and compassion.
-
-JANE (V.O.)
-Real help for real debt.
-
-CLOSE ON: A computer screen showing a debt reduction plan.
-
-JANE (V.O.)
-Professional, confidential support awaits.
-
-INT. LIVING ROOM - EVENING - WEEKS LATER
-
-Jane at her table again, but now organized folders replace the scattered bills. She smiles as she checks off items on a financial plan.
-
-JANE (V.O.)
-Take the first step...
-
-She closes her budget book with satisfaction.
-
-JANE
-(looking directly at camera)
-Start your free debt review today.
-
-FADE OUT.
-        """
-        self.image_prompts = [
-            "Close-up of a worried woman in her 30s sitting at a kitchen table at night, surrounded by bills and notices, face illuminated by lamp light, shoulders slumped in stress",
-            
-            "Professional modern office setting with sunlight streaming through windows, a compassionate financial advisor in business attire reviewing documents with a relieved client, desk has organized folders and a computer",
-            
-            "Close-up of a computer screen showing a colorful debt reduction graph with downward trending lines, professional desktop setting, office environment",
-            
-            "Same woman from first scene, now sitting at a neat kitchen table with organized financial documents in labeled folders, checking items off a list, expression hopeful and relieved, warmer lighting"
-        ]
-
+# Copy the entire screen_crew() function definition from paste.txt
 def screen_crew():
-    # Return simulated output
-    return ScriptOutput()
-
-# Function to generate images using Google Gemini (simplified for mock)
-def generate_gemini_images(prompts, api_key="YOUR_API_KEY"):
-    # For demonstration purposes - in real deployment you'd use the actual API
-    image_paths = []
+    from pydantic import BaseModel
+    from typing import List, Optional
     
-    with st.spinner("Generating images from screenplay scenes..."):
-        progress_bar = st.progress(0)
-        
-        for i, prompt in enumerate(prompts):
-            status_text = st.empty()
-            status_text.text(f"Processing image {i+1}/{len(prompts)}")
-            
-            try:
-                # Create a placeholder image instead of using the API
-                placeholder = Image.new('RGB', (400, 300), color=(173, 216, 230))
-                img_byte_arr = BytesIO()
-                placeholder.save(img_byte_arr, format='PNG')
-                img_byte_arr.seek(0)
-                
-                # Display image in Streamlit
-                st.image(img_byte_arr, caption=f"Scene {i+1}", use_column_width=True)
-                
-                # Add to images list
-                image_paths.append((f"scene-{i+1:02d}.png", img_byte_arr))
-            
-            except Exception as e:
-                st.error(f"Error generating image {i+1}: {str(e)}")
-                # Create a placeholder image instead
-                placeholder = Image.new('RGB', (400, 300), color=(173, 216, 230))
-                img_byte_arr = BytesIO()
-                placeholder.save(img_byte_arr, format='PNG')
-                img_byte_arr.seek(0)
-                image_paths.append((f"placeholder-{i+1}.png", img_byte_arr))
-            
-            # Update progress
-            progress_bar.progress((i + 1) / len(prompts))
-        
-        progress_bar.empty()
-        status_text.empty()
+    class ScriptOutput(BaseModel):
+        title: str
+        style: str
+        hook: str = None
+        body: str = None
+        cta: str = None
+        final_script: str = None
+        screenplay: str = None
+        image_prompts: List[str] = None  # List of prompts for the scenes
+
+    # Define the Task planning Agent
+    task_planning = Agent(
+        role = "Workflow Architect for Ad Creation",
+        goal = "transform a clean campaign summary into a detailed workflow and instructions for research and script writing agents.",
+        backstory = """An experienced workflow architect specializing in streamlining creative processes for advertising campaigns. They excel at dissecting campaign objectives and translating them into clear, sequential tasks for specialized agents. With a deep understanding of the content creation lifecycle, they ensure that research and scripting are aligned and contribute effectively to the overall campaign goals. They focus on providing precise guidance to each agent, maximizing efficiency and creative output.""",
+        memory = True,
+        verbose = True,
+        delegation = False,
+        # llm = llm1,
+        tools=[SerperDevTool()]  # Still useful for the architect to understand the landscape
+    )
     
-    return image_paths
-
-# Function to upload images to ImageKit (mock)
-def upload_to_imagekit(image_data_list):
-    # Mock function - in real deployment you'd use the actual API
-    image_urls = []
-    file_ids = []
+    # ... (rest of the crew system code from paste.txt)
     
-    with st.spinner("Uploading images to cloud storage..."):
-        progress_bar = st.progress(0)
-        
-        for i, (filename, img_data) in enumerate(image_data_list):
-            try:
-                # Create mock URL
-                mock_url = f"https://example.com/images/{filename}"
-                mock_id = f"file_{i}"
-                
-                image_urls.append(mock_url)
-                file_ids.append(mock_id)
-                
-                progress_bar.progress((i + 1) / len(image_data_list))
-                
-            except Exception as e:
-                st.error(f"Error uploading image {filename}: {str(e)}")
-                image_urls.append(None)
-                file_ids.append(None)
-        
-        progress_bar.empty()
-    
-    return image_urls, file_ids
-
-# Function to create Creatify link (mock)
-def create_creatify_link(image_urls, title="AI Generated Screenplay Images"):
-    # Mock function - in real deployment you'd use the actual API
-    with st.spinner("Creating link to images..."):
-        time.sleep(1)
-        mock_response = {
-            "link": {
-                "id": "mock-link-id",
-                "url": "https://example.com/view/mock-link"
-            }
-        }
-        return mock_response
-
-# Function to create video from screenplay and images (mock)
-def create_creatify_video(screenplay_script, override_avatar=None):
-    # Mock function - in real deployment you'd use the actual API
-    with st.spinner("Initiating video creation..."):
-        time.sleep(1)
-        mock_response = {
-            "id": "mock-video-job-id",
-            "status": "pending"
-        }
-        return mock_response
-
-# Function to check video status (mock)
-def check_video_status(video_id):
-    # Mock function - in real deployment you'd use the actual API
-    mock_response = {
-        "id": video_id,
-        "status": "ready",
-        "video_url": "https://example.com/videos/mock-video.mp4"
+    # For simulation purposes in the Streamlit app, let's return a mock output
+    return {
+        "title": "Financial Freedom Ad",
+        "style": "screenplay",
+        "final_script": "You're not alone... Financial stress is affecting so many. Real help for real debt. Professional, confidential support awaits. Take the first step... Start your free debt review today.",
+        "screenplay": "EXT. CITY STREET - DAY\n\nA PERSON sits alone on a bench, looking stressed about bills.\n\nNARRATOR\nYou're not alone...\n\nINT. LIVING ROOM - DAY\n\nSeveral PEOPLE look at financial documents with worried expressions.\n\nNARRATOR\nFinancial stress is affecting so many.\n\nINT. OFFICE - DAY\n\nA FINANCIAL ADVISOR greets a client warmly.\n\nNARRATOR\nReal help for real debt.\n\nINT. CONSULTATION ROOM - DAY\n\nThe ADVISOR and CLIENT review documents together.\n\nNARRATOR\nProfessional, confidential support awaits.\n\nEXT. OFFICE BUILDING - DAY\n\nA PERSON walks confidently toward the entrance.\n\nNARRATOR\nTake the first step...\n\nON SCREEN TEXT: \"Start your free debt review today.\"",
+        "image_prompts": [
+            "A stressed person sitting alone on a bench in a city street, looking at bills, concern on their face, daytime scene",
+            "Interior living room with several diverse people looking at financial documents with worried expressions",
+            "Professional financial advisor in business attire greeting a client warmly in a modern office",
+            "Financial advisor and client reviewing documents together in a professional consultation room",
+            "Person walking confidently toward the entrance of a professional office building, bright daylight"
+        ]
     }
-    return mock_response
-
-# Function to render the video (mock)
-def render_video(video_id):
-    # Mock function - in real deployment you'd use the actual API
-    with st.spinner("Rendering final video..."):
-        time.sleep(2)
-        mock_response = {
-            "id": video_id,
-            "status": "rendering"
-        }
-        return mock_response
-
 # Sample data (would be replaced with actual API calls)
 def get_voice_samples(page=1, per_page=6):
     # Mock data
@@ -422,36 +259,166 @@ def get_video_styles(page=1, per_page=6):
     end_idx = start_idx + per_page
     return all_styles[start_idx:end_idx], len(all_styles)
 
-# Dummy function for generating script
+# Simulated functions for AI features
 def generate_script(prompt):
+    # Store the prompt as the brief
+    st.session_state.brief = prompt
+    
+    # Simulate calling the crew system (in production, you'd use the actual crew system)
+    time.sleep(2)  # Simulate processing time
+    
+    # Get result from screen_crew function
+    result = screen_crew()
+    
+    # Store the results in session state
+    st.session_state.screenplay_script = result["final_script"]
+    st.session_state.image_prompts = result["image_prompts"]
+    
+    # Return the formatted screenplay for display
+    return result["screenplay"]
+
+FADE IN:
+
+EXT. CITY STREET - DAY
+
+A bustling city street with people hurrying about their day.
+
+NARRATOR (V.O.)
+In a world where technology and humanity intersect...
+
+[Character descriptions and additional scenes would follow...]
+
+FADE OUT.
+"""
+
+def generate_audio(script, voice_id):
     # In a real implementation, this would call your AI API
-    with st.spinner("Generating script with AI agents..."):
-        # Simulate calling the screen_crew function
-        time.sleep(2)  # Simulate processing time
-        
-        # Get results from the AI crew
-        screenplay_data = screen_crew()
-        
-        # Store in session state
-        st.session_state.screenplay_data = screenplay_data
-        
-        # Return the final script
-        return screenplay_data.screenplay
+    time.sleep(2)  # Simulate API call
+    return "generated_audio.mp3"  # This would be a file path or base64 data
+
+def generate_video(script, style_id, audio=None):
+    # In a real implementation, this would call your AI API
+    time.sleep(3)  # Simulate API call
+    return "generated_video.mp4"  # This would be a file path or base64 data
+
+def generate_screenplay_images(screenplay):
+    # In a real implementation, this would parse the screenplay and generate images
+    time.sleep(2)  # Simulate API call
+    # Return mock image data
+    return ["image1.jpg", "image2.jpg", "image3.jpg"]
+def generate_images():
+    """Generate images from the image prompts"""
+    image_urls = []
+    
+    for i, prompt in enumerate(st.session_state.image_prompts):
+        try:
+            # Generate content using Gemini API
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-exp-image-generation",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=['TEXT', 'IMAGE']
+                )
+            )
+            
+            # Process response
+            for part in response.candidates[0].content.parts:
+                if getattr(part, "inline_data", None):
+                    # Save the generated image
+                    image = Image.open(BytesIO(part.inline_data.data))
+                    filename = f"scene-{i+1:02d}-gemini-image.png"
+                    image.save(filename)
+                    
+                    # Upload the image to ImageKit
+                    upload = imagekit.upload(
+                        file=open(filename, "rb"),
+                        file_name=filename
+                    )
+                    
+                    # Store the URL
+                    image_urls.append(upload.url)
+                    break
+        except Exception as e:
+            st.error(f"Error generating image {i+1}: {str(e)}")
+    
+    st.session_state.generated_image_urls = image_urls
+    return image_urls
+    
+def create_creatify_link(image_urls):
+    """Create a Creatify link with the generated images"""
+    creatify_url = "https://api.creatify.ai/api/links/link_with_params/"
+    
+    payload = {
+        "title": "Generated Images Collection",
+        "description": "Images generated with Google Gemini",
+        "image_urls": image_urls,
+        "video_urls": [],
+        "reviews": "Finding Your Way to Financial Freedom"
+    }
+    
+    response = requests.request("POST", creatify_url, json=payload, headers=creatify_headers)
+    
+    if response.status_code == 200:
+        json_response = response.json()
+        st.session_state.creatify_link = json_response.get('url')
+        return json_response
+    else:
+        st.error(f"Error creating Creatify link: {response.text}")
+        return None
+
+# Mock function to simulate playing audio
+def play_audio_sample(sample_id):
+    st.audio(f"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{sample_id}.mp3")
 
 # Mock function to get a placeholder image
 def get_placeholder_image(width, height, text="Preview"):
     image = Image.new('RGB', (width, height), color=(173, 216, 230))
     return image
+def create_creatify_video(script):
+    """Create a video using Creatify API"""
+    url = "https://api.creatify.ai/api/link_to_videos/"
+    
+    payload = {
+        "name": "AI Generated Video",
+        "target_platform": "Facebook",
+        "target_audience": "Debt Payers",
+        "language": "en",
+        "video_length": 30,
+        "aspect_ratio": "16x9",
+        "visual_style": "GreenScreenEffectTemplate",
+        "override_avatar": "a7a240e8-efbf-4ab5-a02d-0f367a810875",
+        "override_script": script,
+        "voiceover_volume": 0.5,
+        "link": "9a98f404-f3d9-4f74-b452-f73013be938f",
+        "no_background_music": True,
+        "caption_style": "normal-black",
+    }
+    
+    response = requests.request("POST", url, json=payload, headers=creatify_headers)
+    
+    if response.status_code == 200:
+        json_response = response.json()
+        st.session_state.creatify_video_id = json_response.get('id')
+        return json_response
+    else:
+        st.error(f"Error creating Creatify video: {response.text}")
+        return None
+def check_video_status(video_id):
+    """Check the status of a Creatify video"""
+    url = f"https://api.creatify.ai/api/link_to_videos/{video_id}/"
+    response = requests.request("GET", url, headers=creatify_headers)
+    return response.json() if response.status_code == 200 else None
 
+def render_creatify_video(video_id):
+    """Render the Creatify video"""
+    url = f"https://api.creatify.ai/api/link_to_videos/{video_id}/render/"
+    response = requests.request("POST", url, headers=creatify_headers)
+    return response.json() if response.status_code == 200 else None
+    
 # UI Components
 def render_sidebar():
     with st.sidebar:
-        st.write("AI Creative Suite")  # Fallback if image isn't available
-        try:
-            st.image("https://via.placeholder.com/150x150.png?text=AI+Suite", width=150)
-        except:
-            pass
-            
+        st.image("https://via.placeholder.com/150x150.png?text=AI+Suite", width=150)
         st.markdown("### Navigation")
         
         if st.button("🏠 Home", key="nav_home"):
@@ -475,8 +442,9 @@ def render_sidebar():
         
         progress_items = {
             "Script": "✅" if st.session_state.script else "❌",
-            "Images": "✅" if st.session_state.screenplay_images else "❌",
-            "Video": "✅" if st.session_state.video_output_url else "❌"
+            "Voice": "✅" if st.session_state.selected_voice else "❌",
+            "Audio": "✅" if st.session_state.generated_audio else "❌",
+            "Video": "✅" if st.session_state.generated_video else "❌"
         }
         
         for item, status in progress_items.items():
@@ -484,15 +452,15 @@ def render_sidebar():
 
 def render_home():
     st.markdown("<h1 class='main-header'>AI Creative Suite</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; font-size: 1.2rem; margin-bottom: 40px;'>Transform your ideas into professional scripts, videos, and images with AI</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 1.2rem; margin-bottom: 40px;'>Transform your ideas into professional scripts, audio, and videos with AI</p>", unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("""
         <div class="card">
-            <div class="card-title">AI Script Generator</div>
-            <p>Create professional scripts using our AI agents. Start with a simple prompt and get a fully-formed screenplay.</p>
+            <div class="card-title">AI Creative Generator</div>
+            <p>Create professional scripts, audio, and videos using our AI tools. Start from scratch or use your existing script.</p>
             <p>Perfect for content creators, marketers, and storytellers.</p>
         </div>
         """, unsafe_allow_html=True)
@@ -507,7 +475,7 @@ def render_home():
         st.markdown("""
         <div class="card">
             <div class="card-title">Screenplay Generator</div>
-            <p>Create professional screenplays with our AI-powered tools. Visualize your story with AI-generated images and convert to video.</p>
+            <p>Create professional screenplays with our AI-powered tools. Visualize your story with generated images.</p>
             <p>Perfect for screenwriters, filmmakers, and visual storytellers.</p>
         </div>
         """, unsafe_allow_html=True)
@@ -525,15 +493,15 @@ def render_home():
         st.markdown("""
         <div class="card">
             <div class="card-title">1. Create Script</div>
-            <p>Generate a professional script using our multi-agent AI system or upload your own.</p>
+            <p>Generate a professional script using our AI chat interface or upload your own.</p>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
         st.markdown("""
         <div class="card">
-            <div class="card-title">2. Generate Images</div>
-            <p>Our AI analyzes your screenplay and generates images for each scene using Google's Gemini.</p>
+            <div class="card-title">2. Generate Audio</div>
+            <p>Select from a variety of AI voices or upload your own audio recording.</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -541,7 +509,7 @@ def render_home():
         st.markdown("""
         <div class="card">
             <div class="card-title">3. Create Video</div>
-            <p>Generate a professional video with your script and generated images using Creatify AI.</p>
+            <p>Choose a video style and generate a professional video with your script and audio.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -556,7 +524,7 @@ def render_script_generator():
         
         user_prompt = st.text_area("Describe what kind of script you want to create:", 
                                   height=100, 
-                                  placeholder="Example: A 30-second commercial for a debt solution service targeting people with financial stress...")
+                                  placeholder="Example: A 30-second commercial for a new coffee brand targeting young professionals...")
         
         if st.button("Generate Script", key="gen_script_btn"):
             with st.spinner("Generating your script..."):
@@ -598,13 +566,9 @@ def render_script_generator():
         
         if uploaded_file is not None:
             # In a real implementation, you would parse the file content
-            try:
-                file_content = uploaded_file.getvalue().decode("utf-8") if uploaded_file.type == "text/plain" else "Script content from uploaded file"
-                st.session_state.script = file_content
-                st.success(f"Uploaded script: {uploaded_file.name}")
-            except Exception as e:
-                st.error(f"Error reading file: {str(e)}")
-                st.session_state.script = f"Sample script content from {uploaded_file.name}"
+            file_content = uploaded_file.getvalue().decode("utf-8") if uploaded_file.type == "text/plain" else "Script content from uploaded file"
+            st.session_state.script = file_content
+            st.success(f"Uploaded script: {uploaded_file.name}")
         
         # Preview area
         st.markdown("---")
@@ -617,8 +581,8 @@ def render_script_generator():
                 # Enable editing
                 pass
                 
-            if st.button("Generate Images from Script", key="proceed_to_images"):
-                go_to_screenplay_generator()
+            if st.button("Proceed to Audio Generation", key="proceed_to_audio"):
+                go_to_audio_generator()
         else:
             st.info("No script available yet. Generate or upload a script to see preview.")
 
@@ -640,75 +604,209 @@ def render_audio_generator():
     
     # Display voice cards in a grid
     cols = st.columns(3)
+
+    cols = st.columns(3)
+
     for i, voice in enumerate(voices):
         with cols[i % 3]:
             is_selected = st.session_state.selected_voice == voice["id"]
-            
-            # Create voice card with simpler approach
-            st.markdown(f"### {voice['name']}")
-            st.markdown(f"**Gender:** {voice['gender']} | **Style:** {voice['style']} | **Language:** {voice['language']}")
-            
-            # Use an image as placeholder for audio
-            audio_placeholder = get_placeholder_image(300, 50, "Audio Waveform")
-            st.image(audio_placeholder, caption=f"Sample Audio for {voice['name']}")
+            card_id = f"voice_card_{voice['id']}"
+    
+            # Create the card
+            card_html = f"""
+            <div class="voice-card {'selected' if is_selected else ''}">
+                <div class="card-header">
+                    <div class="card-title">{voice["name"]}</div>
+                    <div class="selection-indicator">{'✓' if is_selected else ''}</div>
+                </div>
+                <div class="card-tags">
+                    <span class="bubble">{voice["gender"]}</span>
+                    <span class="bubble">{voice["style"]}</span>
+                    <span class="bubble">{voice["language"]}</span>
+                </div>
+                <audio controls style="width: 100%; margin-bottom: 10px;">
+                    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-{voice['id']}.mp3" type="audio/mp3">
+                    Your browser does not support the audio element.
+                </audio>
+            </div>
+            """
+    
+            st.markdown(card_html, unsafe_allow_html=True)
     
             # Button to select this voice
             if st.button(f"Select {voice['name']}", key=f"select_btn_{voice['id']}"):
                 st.session_state.selected_voice = voice["id"]
                 st.rerun()
+
+
     
-    # Pagination
+    # Add CSS to style the tick-box
+    st.markdown("""
+    <style>
+    .voice-card {
+        position: relative;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        transition: all 0.3s ease;
+        background-color: #fff;
+    }
+    
+    .voice-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .tick-box {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 24px;
+        height: 24px;
+        background-color: #f0f0f0;
+        border: 2px solid #4CAF50;
+        border-radius: 4px;
+        font-size: 16px;
+        color: #4CAF50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-weight: bold;
+    }
+    
+    .voice-card .tick-box:hover {
+        background-color: #e0ffe0;
+    }
+    .card-title {
+        font-weight: bold;
+        font-size: 1.1em;
+        margin-bottom: 10px;
+    }
+    .bubble {
+        background-color: #f0f0f0;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        margin-right: 5px;
+    }
+    .card-tags {
+        margin-bottom: 15px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    
+    # Add CSS for the voice cards
+    st.markdown("""
+    <style>
+    .voice-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+    }
+    
+    .voice-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .voice-card.selected {
+        border: 2px solid #4CAF50;
+        background-color: rgba(76, 175, 80, 0.05);
+    }
+    
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    
+    .card-title {
+        font-weight: bold;
+        font-size: 1.1em;
+    }
+    
+    .selection-indicator {
+        color: #4CAF50;
+        font-weight: bold;
+        font-size: 1.2em;
+    }
+    
+    .card-tags {
+        margin-bottom: 15px;
+    }
+    
+    .bubble {
+        background-color: #f0f0f0;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        margin-right: 5px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Pagination controls
     st.markdown("<div class='pagination'>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col1:
+    cols = st.columns([1, 4, 1])
+    with cols[0]:
         if st.session_state.voice_page > 1:
-            if st.button("Previous", key="prev_voices"):
+            if st.button("← Previous", key="prev_voice_page"):
                 st.session_state.voice_page -= 1
                 st.rerun()
-    
-    with col2:
+                
+    with cols[1]:
         st.markdown(f"<p style='text-align: center;'>Page {st.session_state.voice_page} of {total_pages}</p>", unsafe_allow_html=True)
-    
-    with col3:
+        
+    with cols[2]:
         if st.session_state.voice_page < total_pages:
-            if st.button("Next", key="next_voices"):
+            if st.button("Next →", key="next_voice_page"):
                 st.session_state.voice_page += 1
                 st.rerun()
     
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # Script preview and Generate button
+    # Upload own audio option
+    st.markdown("---")
+    st.markdown("<h3>Or Upload Your Own Audio</h3>", unsafe_allow_html=True)
+    
+    uploaded_audio = st.file_uploader("Upload an audio file", type=["mp3", "wav", "ogg"])
+    
+    if uploaded_audio is not None:
+        st.audio(uploaded_audio)
+        st.session_state.generated_audio = uploaded_audio
+        st.success("Audio uploaded successfully!")
+    
+    # Generate audio button
+    st.markdown("---")
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        if st.button("Generate Audio", key="gen_audio_btn", disabled=not st.session_state.selected_voice and not uploaded_audio):
+            if st.session_state.selected_voice:
+                with st.spinner("Generating audio..."):
+                    generated_audio = generate_audio(st.session_state.script, st.session_state.selected_voice)
+                    st.session_state.generated_audio = generated_audio
+                    st.success("Audio generated successfully!")
+    
+    with col2:
+        if st.session_state.generated_audio and st.button("Proceed to Video Generation", key="proceed_to_video"):
+            go_to_video_generator()
+    
+    # Preview area for the script
     st.markdown("---")
     st.markdown("<h3>Script Preview</h3>", unsafe_allow_html=True)
     
-    st.text_area("Script to convert to audio:", value=st.session_state.script, height=200, key="audio_script_preview", disabled=True)
-    
-    if st.session_state.selected_voice:
-        if st.button("Generate Audio", key="gen_audio_btn"):
-            with st.spinner("Generating audio..."):
-                # Simulate audio generation
-                time.sleep(2)
-                st.session_state.generated_audio = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-                st.success("Audio generated successfully!")
-    else:
-        st.warning("Please select a voice first.")
-    
-    # Audio preview
-    if st.session_state.generated_audio:
-        st.markdown("<h3>Generated Audio</h3>", unsafe_allow_html=True)
-        st.audio(st.session_state.generated_audio)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Download button would be implemented here
-            if st.button("Download Audio"):
-                st.success("Audio downloaded successfully!")
-        
-        with col2:
-            if st.button("Proceed to Video Creator"):
-                go_to_video_generator()
+    with st.expander("View Script", expanded=False):
+        st.markdown(st.session_state.script)
 
 def render_video_generator():
     st.markdown("<h1 class='main-header'>Video Generator</h1>", unsafe_allow_html=True)
@@ -723,46 +821,266 @@ def render_video_generator():
     st.markdown("<h3>Select a Video Style</h3>", unsafe_allow_html=True)
     
     # Get paginated video styles
-    styles, total_styles = get_video_styles(page=st.session_state.video_page)
+    video_styles, total_styles = get_video_styles(page=st.session_state.video_page)
     total_pages = (total_styles + 5) // 6  # 6 items per page, rounded up
     
-    # Display style cards in a grid
+    # Display video style cards in a grid
     cols = st.columns(3)
-    for i, style in enumerate(styles):
+    for i, style in enumerate(video_styles):
         with cols[i % 3]:
+            # Check if this style is selected
             is_selected = st.session_state.selected_video_style == style["id"]
+            card_class = "card card-selected" if is_selected else "card"
             
-            # Create style card
-            st.markdown(f"### {style['name']}")
-            st.markdown(f"{style['description']}")
+            # Extract characteristic tags from description
+            characteristics = [
+                f"Cinematic", 
+                f"HD Quality", 
+                f"{['Modern', 'Vintage', 'Futuristic'][i % 3]}"
+            ]
             
-            # Use a placeholder for video preview
-            video_placeholder = get_placeholder_image(300, 200, f"Style {style['id']} Preview")
-            st.image(video_placeholder, caption=f"Preview of {style['name']}")
-    
-            # Button to select this style
-            if st.button(f"Select {style['name']}", key=f"select_style_{style['id']}"):
-                st.session_state.selected_video_style = style["id"]
+            st.markdown(f"""
+            <div class="{card_class}">
+                <div class="card-title">{style["name"]}</div>
+                <div>
+                    <span class="bubble">{characteristics[0]}</span>
+                    <span class="bubble">{characteristics[1]}</span>
+                    <span class="bubble">{characteristics[2]}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Create placeholder preview image
+            placeholder = get_placeholder_image(300, 200, f"Style {style['id']}")
+            st.image(placeholder, use_column_width=True)
+            
+            if st.button("Select" if not is_selected else "Selected", key=f"select_video_{style['id']}"):
+                select_video_style(style["id"])
                 st.rerun()
     
-    # Pagination
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col1:
+    # Pagination controls
+    st.markdown("<div class='pagination'>", unsafe_allow_html=True)
+    cols = st.columns([1, 4, 1])
+    with cols[0]:
         if st.session_state.video_page > 1:
-            if st.button("Previous", key="prev_styles"):
+            if st.button("← Previous", key="prev_video_page"):
                 st.session_state.video_page -= 1
                 st.rerun()
-    
-    with col2:
+                
+    with cols[1]:
         st.markdown(f"<p style='text-align: center;'>Page {st.session_state.video_page} of {total_pages}</p>", unsafe_allow_html=True)
-    
-    with col3:
+        
+    with cols[2]:
         if st.session_state.video_page < total_pages:
-            if st.button("Next", key="next_styles"):
+            if st.button("Next →", key="next_video_page"):
                 st.session_state.video_page += 1
                 st.rerun()
     
-    # Video generation section
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Audio selection for the video
     st.markdown("---")
-    st.markdown("<h3>Generate Video</h3>", unsafe_allow_html=True)
+    st.markdown("<h3>Audio Selection</h3>", unsafe_allow_html=True)
+    
+    audio_option = st.radio(
+        "Choose audio source:",
+        ["Use Generated Audio", "Upload New Audio"]
+    )
+    
+    if audio_option == "Use Generated Audio":
+        if st.session_state.generated_audio:
+            st.success("Using previously generated audio")
+            # In a real implementation, you would play the audio here
+        else:
+            st.warning("No generated audio found. Please generate audio first.")
+            if st.button("Go to Audio Generator"):
+                go_to_audio_generator()
+    else:
+        uploaded_audio = st.file_uploader("Upload an audio file for the video", type=["mp3", "wav", "ogg"], key="video_audio_upload")
+        if uploaded_audio is not None:
+            st.audio(uploaded_audio)
+            st.session_state.generated_audio = uploaded_audio
+            st.success("Audio uploaded successfully!")
+    
+    # Generate video button
+    st.markdown("---")
+    
+    if st.button("Generate Video", key="gen_video_btn", disabled=not st.session_state.selected_video_style or not st.session_state.generated_audio):
+        if st.session_state.selected_video_style and st.session_state.generated_audio:
+            with st.spinner("Generating video... This may take a few moments."):
+                generated_video = generate_video(
+                    st.session_state.script, 
+                    st.session_state.selected_video_style,
+                    st.session_state.generated_audio
+                )
+                st.session_state.generated_video = generated_video
+                st.success("Video generated successfully!")
+                
+                # Display a placeholder for the video
+                placeholder = get_placeholder_image(640, 360, "Video Preview")
+                st.image(placeholder, use_column_width=True)
+                
+                # Download button (in a real implementation, this would be a link to the actual video)
+                st.download_button(
+                    label="Download Video",
+                    data=io.BytesIO().getvalue(),  # Placeholder
+                    file_name="generated_video.mp4",
+                    mime="video/mp4")
+
+    def render_video_generator():
+    # Keep most of the existing function, but add this section at the end
+    
+    # Add a section for AI-generated video
+    st.markdown("---")
+    st.markdown("<h3>AI-Generated Video</h3>", unsafe_allow_html=True)
+    
+    if st.session_state.screenplay_script:
+        if not st.session_state.creatify_video_id:
+            if st.button("Generate AI Video", key="gen_ai_video"):
+                with st.spinner("Creating video with Creatify..."):
+                    result = create_creatify_video(st.session_state.screenplay_script)
+                    if result:
+                        st.success(f"Video creation started!")
+                        st.rerun()
+        else:
+            # Check video status
+            if st.button("Check Video Status", key="check_status"):
+                with st.spinner("Checking video status..."):
+                    status = check_video_status(st.session_state.creatify_video_id)
+                    if status:
+                        st.write(f"Status: {status.get('status')}")
+                        
+                        if status.get("status") == "done" and status.get("video_output"):
+                            st.video(status["video_output"])
+                            
+                            # Download button
+                            video_url = status["video_output"]
+                            st.markdown(f"[Download Video]({video_url})")
+                        else:
+                            st.info(f"Video is still processing. Progress: {status.get('progress', 0) * 100:.0f}%")
+                            
+                            # Show preview if available
+                            if status.get("preview"):
+                                st.markdown(f"[Preview Link]({status['preview']})")
+            
+            # Render video button
+            if st.button("Render Video", key="render_video"):
+                with st.spinner("Rendering video..."):
+                    result = render_creatify_video(st.session_state.creatify_video_id)
+                    if result:
+                        st.success("Video rendering started!")
+                        st.write(result)    
+
+def render_screenplay_generator():
+    st.markdown("<h1 class='main-header'>Screenplay Generator</h1>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([3, 2])
+    
+    with col1:
+        st.markdown("<h3>Write Your Screenplay</h3>", unsafe_allow_html=True)
+        
+        # Add input field for the campaign brief
+        campaign_brief = st.text_area("Enter campaign brief:", height=100, 
+                               placeholder="A 30-second ad about financial freedom...",
+                               key="campaign_brief")
+        
+        if st.button("Generate with AI Crew", key="gen_screenplay_btn"):
+            with st.spinner("AI crew is working on your screenplay..."):
+                st.session_state.brief = campaign_brief
+                result = screen_crew()  # This would be your actual crew system
+                st.session_state.script = result["screenplay"]
+                st.session_state.screenplay_script = result["final_script"]
+                st.session_state.image_prompts = result["image_prompts"]
+                st.success("Screenplay and image prompts generated!")
+                st.rerun()
+        
+        # Display the screenplay if available
+        if st.session_state.script:
+            screenplay = st.text_area("Generated screenplay:", height=400, 
+                                   value=st.session_state.script,
+                                   key="screenplay_display")
+        
+        # Display image prompts if available
+        if st.session_state.image_prompts:
+            st.markdown("<h3>Generated Image Prompts</h3>", unsafe_allow_html=True)
+            for i, prompt in enumerate(st.session_state.image_prompts):
+                st.markdown(f"**Scene {i+1}:** {prompt}")
+    
+    with col2:
+        st.markdown("<h3>Generated Images</h3>", unsafe_allow_html=True)
+        
+        # Generate images button if we have prompts but no images
+        if st.session_state.image_prompts and not st.session_state.generated_image_urls:
+            if st.button("Generate Images", key="gen_images"):
+                with st.spinner("Generating images... This may take a moment."):
+                    image_urls = generate_images()
+                    if image_urls:
+                        st.success(f"Generated {len(image_urls)} images!")
+                        st.rerun()
+        
+        # Display generated images if available
+        if st.session_state.generated_image_urls:
+            for i, url in enumerate(st.session_state.generated_image_urls):
+                st.image(url, caption=f"Scene {i+1}", use_column_width=True)
+            
+            # Create Creatify link button
+            if not st.session_state.creatify_link:
+                if st.button("Create Creatify Link", key="create_link"):
+                    with st.spinner("Creating Creatify link..."):
+                        result = create_creatify_link(st.session_state.generated_image_urls)
+                        if result:
+                            st.success(f"Creatify link created!")
+                            st.rerun()
+            else:
+                st.success(f"Creatify link: {st.session_state.creatify_link}")
+        
+        # Create video button if we have a script
+        if st.session_state.screenplay_script:
+            if not st.session_state.creatify_video_id:
+                if st.button("Create Video", key="create_video"):
+                    with st.spinner("Creating video with Creatify..."):
+                        result = create_creatify_video(st.session_state.screenplay_script)
+                        if result:
+                            st.success(f"Video creation started!")
+                            st.rerun()
+            else:
+                # Check video status
+                if st.button("Check Video Status", key="check_status"):
+                    with st.spinner("Checking video status..."):
+                        status = check_video_status(st.session_state.creatify_video_id)
+                        if status:
+                            st.write(status)
+                            
+                            if status.get("status") == "done" and status.get("video_output"):
+                                st.video(status["video_output"])
+                            else:
+                                st.info(f"Video status: {status.get('status')}")
+                
+                # Render video button
+                if st.button("Render Video", key="render_video"):
+                    with st.spinner("Rendering video..."):
+                        result = render_creatify_video(st.session_state.creatify_video_id)
+                        if result:
+                            st.success("Video rendering started!")
+                            st.rerun()
+        
+        if st.session_state.script and st.button("Proceed to Audio", key="screenplay_to_audio"):
+            go_to_audio_generator()
+
+# Main app logic
+def main():
+    render_sidebar()
+    
+    if st.session_state.page == "home":
+        render_home()
+    elif st.session_state.page == "script_generator":
+        render_script_generator()
+    elif st.session_state.page == "audio_generator":
+        render_audio_generator()
+    elif st.session_state.page == "video_generator":
+        render_video_generator()
+    elif st.session_state.page == "screenplay_generator":
+        render_screenplay_generator()
+
+if __name__ == "__main__":
+    main()
