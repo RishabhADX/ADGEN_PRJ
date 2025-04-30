@@ -141,7 +141,6 @@ Keep the total word count under 200 words for the script portion.
         response = client.models.generate_content(
             model="gemini-1.5-pro",
             contents=prompt,
-            generation_config={"temperature": 0.7, "max_output_tokens": 1024}
         )
         
         # Get the response text from the response object
