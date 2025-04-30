@@ -375,7 +375,7 @@ with st.sidebar:
         st.session_state.image_urls = []
         st.session_state.link_data = None
         st.session_state.video_data = None
-        st.experimental_rerun()
+        st.rerun()
 
 # Step 1: Enter Campaign Details
 if st.session_state.step == 1:
@@ -408,7 +408,7 @@ if st.session_state.step == 1:
                     st.session_state.screenplay_data = screenplay_data
                     st.session_state.project_name = project_name
                     st.session_state.step = 2
-                    st.experimental_rerun()
+                    st.rerun()
 
 # Step 2: Display Screenplay and Confirm
 elif st.session_state.step == 2:
@@ -435,12 +435,12 @@ elif st.session_state.step == 2:
     # Edit screenplay if needed
     if st.button("Edit Screenplay"):
         st.session_state.step = 1
-        st.experimental_rerun()
+        st.rerun()
     
     # Proceed to image generation
     if st.button("Generate Images from Prompts"):
         st.session_state.step = 3
-        st.experimental_rerun()
+        st.rerun()
 
 # Step 3: Generate and Upload Images
 elif st.session_state.step == 3:
@@ -506,7 +506,7 @@ elif st.session_state.step == 3:
                 st.session_state.step = 4
                 status_text.empty()
                 st.success("All images generated and uploaded! Link created successfully.")
-                st.button("Continue to Video Creation", on_click=lambda: st.experimental_rerun())
+                st.button("Continue to Video Creation", on_click=lambda: st.rerun())
         else:
             st.error("No images were successfully generated and uploaded. Please try again.")
 
@@ -596,7 +596,7 @@ elif st.session_state.step == 4:
                     st.session_state.video_data = video_data
                     st.session_state.step = 5
                     st.success("Video creation initiated!")
-                    st.button("View Results", on_click=lambda: st.experimental_rerun())
+                    st.button("View Results", on_click=lambda: st.rerun())
     else:
         st.error("No personas available. Please check your API connection.")
 
@@ -607,7 +607,7 @@ elif st.session_state.step == 5:
     if not st.session_state.video_data:
         st.error("No video data available. Please go back and create a video.")
         st.session_state.step = 4
-        st.button("Go Back", on_click=lambda: st.experimental_rerun())
+        st.button("Go Back", on_click=lambda: st.rerun())
     else:
         # Get current status
         video_id = st.session_state.video_data.get("id")
@@ -659,7 +659,7 @@ elif st.session_state.step == 5:
                 
                 # Show refresh button
                 if st.button("Refresh Status"):
-                    st.experimental_rerun()
+                    st.rerun()
                 
                 # Show preview if available
                 preview_url = video_status.get("preview")
@@ -716,7 +716,7 @@ elif st.session_state.step == 5:
                 # Option to try again
                 if st.button("Try Again"):
                     st.session_state.step = 4
-                    st.experimental_rerun()
+                    st.rerun()
             
             # Render button (for pending/running status)
             if status != "done" and status != "failed":
@@ -729,7 +729,7 @@ elif st.session_state.step == 5:
                         else:
                             st.session_state.video_data = render_result
                             st.success("Rendering started!")
-                            st.experimental_rerun()
+                            st.rerun()
 
 # Footer
 st.markdown("""
