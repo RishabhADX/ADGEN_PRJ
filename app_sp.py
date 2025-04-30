@@ -914,48 +914,47 @@ def render_video_generator():
                     mime="video/mp4")
 
     def render_video_generator():
-    # Keep most of the existing function, but add this section at the end
     
-    # Add a section for AI-generated video
-    st.markdown("---")
-    st.markdown("<h3>AI-Generated Video</h3>", unsafe_allow_html=True)
-    
-    if st.session_state.screenplay_script:
-        if not st.session_state.creatify_video_id:
-            if st.button("Generate AI Video", key="gen_ai_video"):
-                with st.spinner("Creating video with Creatify..."):
-                    result = create_creatify_video(st.session_state.screenplay_script)
-                    if result:
-                        st.success(f"Video creation started!")
-                        st.rerun()
-        else:
-            # Check video status
-            if st.button("Check Video Status", key="check_status"):
-                with st.spinner("Checking video status..."):
-                    status = check_video_status(st.session_state.creatify_video_id)
-                    if status:
-                        st.write(f"Status: {status.get('status')}")
-                        
-                        if status.get("status") == "done" and status.get("video_output"):
-                            st.video(status["video_output"])
+        # Add a section for AI-generated video
+        st.markdown("---")
+        st.markdown("<h3>AI-Generated Video</h3>", unsafe_allow_html=True)
+        
+        if st.session_state.screenplay_script:
+            if not st.session_state.creatify_video_id:
+                if st.button("Generate AI Video", key="gen_ai_video"):
+                    with st.spinner("Creating video with Creatify..."):
+                        result = create_creatify_video(st.session_state.screenplay_script)
+                        if result:
+                            st.success(f"Video creation started!")
+                            st.rerun()
+            else:
+                # Check video status
+                if st.button("Check Video Status", key="check_status"):
+                    with st.spinner("Checking video status..."):
+                        status = check_video_status(st.session_state.creatify_video_id)
+                        if status:
+                            st.write(f"Status: {status.get('status')}")
                             
-                            # Download button
-                            video_url = status["video_output"]
-                            st.markdown(f"[Download Video]({video_url})")
-                        else:
-                            st.info(f"Video is still processing. Progress: {status.get('progress', 0) * 100:.0f}%")
-                            
-                            # Show preview if available
-                            if status.get("preview"):
-                                st.markdown(f"[Preview Link]({status['preview']})")
-            
-            # Render video button
-            if st.button("Render Video", key="render_video"):
-                with st.spinner("Rendering video..."):
-                    result = render_creatify_video(st.session_state.creatify_video_id)
-                    if result:
-                        st.success("Video rendering started!")
-                        st.write(result)    
+                            if status.get("status") == "done" and status.get("video_output"):
+                                st.video(status["video_output"])
+                                
+                                # Download button
+                                video_url = status["video_output"]
+                                st.markdown(f"[Download Video]({video_url})")
+                            else:
+                                st.info(f"Video is still processing. Progress: {status.get('progress', 0) * 100:.0f}%")
+                                
+                                # Show preview if available
+                                if status.get("preview"):
+                                    st.markdown(f"[Preview Link]({status['preview']})")
+                
+                # Render video button
+                if st.button("Render Video", key="render_video"):
+                    with st.spinner("Rendering video..."):
+                        result = render_creatify_video(st.session_state.creatify_video_id)
+                        if result:
+                            st.success("Video rendering started!")
+                            st.write(result)    
 
 def render_screenplay_generator():
     st.markdown("<h1 class='main-header'>Screenplay Generator</h1>", unsafe_allow_html=True)
