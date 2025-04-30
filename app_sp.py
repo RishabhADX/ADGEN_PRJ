@@ -203,6 +203,22 @@ Keep the total word count under 200 words for the script portion.
     except Exception as e:
         return None, str(e)
 
+# Function to generate a voice preview
+def generate_voice_preview(voice_id, text="This is a sample of how this voice sounds."):
+    url = "https://api.creatify.ai/api/tts/"
+    
+    payload = {
+        "text": text,
+        "voice_id": voice_id
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        data = response.json()
+        return data.get("audio_url"), None
+    except Exception as e:
+        return None, f"Error generating voice preview: {str(e)}"
+        
 # Function to generate image with Gemini
 def generate_image(prompt):
     try:
@@ -580,7 +596,7 @@ elif st.session_state.step == 4:
             video_length = st.slider("Video Length (seconds)", 15, 60, 30)
             aspect_ratio = st.selectbox("Aspect Ratio", ["16x9", "1x1", "9x16"])
 
-            # In Step 4 (Create Video), we need to add the voice selection UI
+            # In Step 4 (Create Video), replace the voice selection section with this enhanced version
             # Add this code right after the aspect_ratio selection
             
             # Get available voices
@@ -588,32 +604,83 @@ elif st.session_state.step == 4:
             
             # Display voice selection
             st.subheader("Select Voice")
-            voice_cols = st.columns(2)
             
-            with voice_cols[0]:
-                # Filter voices by selected language if needed
-                filtered_voices = [v for v in voices if language in v.get("voice_id", "").lower()] if language else voices
-                if not filtered_voices and voices:
-                    # Fallback to all voices if no matches for language
-                    filtered_voices = voices
-                    st.warning(f"No voices found for {language} language. Showing all available voices.")
-                
-                voice_options = [(v.get("voice_id"), f"{v.get('name')} ({v.get('gender')}, {v.get('language')})") 
-                                 for v in filtered_voices]
-                
-                # Add a "None" option
-                voice_options = [("", "Default Voice")] + voice_options
-                
-                # Get voice IDs and display names
-                voice_ids, voice_names = zip(*voice_options) if voice_options else ([""], ["No voices available"])
-                
-                # Create the selectbox
-                selected_voice_index = st.selectbox("Voice", range(len(voice_ids)), 
-                                                   format_func=lambda i: voice_names[i])
-                selected_voice = voice_ids[selected_voice_index]
+            # Display voices in a scrollable container with preview functionality
+            st.write("Click on a voice to preview how it sounds")
             
-            with voice_cols[1]:
+            # Create a container with fixed height for scrolling
+            voice_container = st.container()
+            with voice_container:
+                # Group voices by language for better organization
+                voice_by_language = {}
+                for voice in voices:
+                    lang = voice.get("language", "Other")
+                    if lang not in voice_by_language:
+                        voice_by_language[lang] = []
+                    voice_by_language[lang].append(voice)
+                
+                # Sort languages alphabetically
+                sorted_languages = sorted(voice_by_language.keys())
+                
+                # Create tabs for different language groups
+                if sorted_languages:
+                    tabs = st.tabs(sorted_languages)
+                    
+                    selected_voice = None
+                    for i, lang in enumerate(sorted_languages):
+                        with tabs[i]:
+                            lang_voices = voice_by_language[lang]
+                            
+                            # Create a grid of voice options
+                            cols = st.columns(2)
+                            for j, voice in enumerate(lang_voices):
+                                with cols[j % 2]:
+                                    voice_id = voice.get("voice_id")
+                                    voice_name = voice.get("name", "Unnamed")
+                                    voice_gender = voice.get("gender", "Unspecified")
+                                    
+                                    # Create a card for each voice
+                                    st.markdown(f"""
+                                    <div style="border:1px solid #ddd; border-radius:5px; padding:10px; margin:5px 0;">
+                                        <strong>{voice_name}</strong> ({voice_gender})
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    
+                                    # Voice preview button
+                                    preview_col, select_col = st.columns([1, 1])
+                                    with preview_col:
+                                        if st.button("Preview", key=f"preview_{voice_id}"):
+                                            with st.spinner("Generating preview..."):
+                                                preview_url, error = generate_voice_preview(voice_id)
+                                                if error:
+                                                    st.error(error)
+                                                elif preview_url:
+                                                    st.audio(preview_url, format="audio/mp3")
+                                                else:
+                                                    st.warning("No preview available")
+                                    
+                                    # Select button
+                                    with select_col:
+                                        if st.button("Select", key=f"select_{voice_id}"):
+                                            selected_voice = voice_id
+                                            st.session_state.selected_voice = voice_id
+                                            st.session_state.selected_voice_name = voice_name
+                else:
+                    st.warning("No voices available")
+            
+            # Show the currently selected voice
+            if 'selected_voice' in st.session_state:
+                st.success(f"Selected voice: {st.session_state.get('selected_voice_name', 'Unknown')}")
+                
+                # Voice volume slider
                 voice_volume = st.slider("Voice Volume", 0.0, 1.0, 0.5, 0.1)
+                
+                # Store in session state
+                st.session_state.voice_volume = voice_volume
+            else:
+                st.info("No voice selected yet. Default voice will be used.")
+                st.session_state.selected_voice = ""
+                st.session_state.voice_volume = 0.5
         
         # Create video button
         if st.button("Create Video") and selected_persona and st.session_state.link_data:
@@ -621,18 +688,20 @@ elif st.session_state.step == 4:
                 link_id = st.session_state.link_data.get("id")
                 script = st.session_state.screenplay_data.get("final_script")
                 
+                # Then update the create_video call to include the voice selection
+                # Replace the existing create_video call with:
                 video_data, video_error = create_video(
-                link_id,
-                st.session_state.project_name,
-                script,
-                selected_persona,
-                platform=platform,
-                language=language,
-                length=video_length,
-                ratio=aspect_ratio,
-                voice_id=selected_voice,  # Add the selected voice
-                volume=voice_volume  # Add the voice volume
-            )
+                    link_id,
+                    st.session_state.project_name,
+                    script,
+                    selected_persona,
+                    platform=platform,
+                    language=language,
+                    length=video_length,
+                    ratio=aspect_ratio,
+                    voice_id=st.session_state.selected_voice,  # Add the selected voice
+                    volume=st.session_state.voice_volume  # Add the voice volume
+                )
                 
                 if video_error:
                     st.error(video_error)
