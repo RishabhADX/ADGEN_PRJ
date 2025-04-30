@@ -614,6 +614,34 @@ elif st.session_state.step == 4:
             st.session_state.selected_voice = ""
             st.session_state.selected_voice_name = ""
             
+        # Updated function to get available voices with preview URLs
+        @st.cache_data(ttl=3600)
+        def get_voices():
+            url = "https://api.creatify.ai/api/voices/"
+            try:
+                response = requests.get(url, headers=headers)
+                return response.json()
+            except Exception as e:
+                st.error(f"Error fetching voices: {str(e)}")
+                # Return a fallback list of voices in case the API call fails
+                return [
+                    {"voice_id": "en-US-Wavenet-A", "name": "US Male", "gender": "Male", "language": "English (US)", 
+                     "accents": [{"accent_name": "US English", "preview_url": ""}]},
+                    {"voice_id": "en-US-Wavenet-C", "name": "US Female", "gender": "Female", "language": "English (US)",
+                     "accents": [{"accent_name": "US English", "preview_url": ""}]},
+                    {"voice_id": "en-GB-Wavenet-B", "name": "UK Male", "gender": "Male", "language": "English (UK)",
+                     "accents": [{"accent_name": "UK English", "preview_url": ""}]},
+                    {"voice_id": "en-GB-Wavenet-C", "name": "UK Female", "gender": "Female", "language": "English (UK)",
+                     "accents": [{"accent_name": "UK English", "preview_url": ""}]},
+                    {"voice_id": "es-ES-Wavenet-B", "name": "Spanish Male", "gender": "Male", "language": "Spanish",
+                     "accents": [{"accent_name": "Spanish", "preview_url": ""}]},
+                    {"voice_id": "fr-FR-Wavenet-C", "name": "French Female", "gender": "Female", "language": "French",
+                     "accents": [{"accent_name": "French", "preview_url": ""}]}
+                ]
+        
+        # Get voices with their preview URLs
+        voices = get_voices()
+        
         # Create voice selection section with embedded audio players
         if not voices:
             st.warning("No voices available")
@@ -629,19 +657,6 @@ elif st.session_state.step == 4:
             # Sort languages alphabetically
             sorted_languages = sorted(voice_by_language.keys())
             
-            # Pre-generate audio samples for all voices
-            if 'voice_samples' not in st.session_state:
-                st.session_state.voice_samples = {}
-                
-                with st.spinner("Loading voice samples..."):
-                    for lang in sorted_languages:
-                        for voice in voice_by_language[lang]:
-                            voice_id = voice.get("voice_id")
-                            # Generate the preview URL but don't display it yet
-                            preview_url, error = generate_voice_preview(voice_id)
-                            if not error and preview_url:
-                                st.session_state.voice_samples[voice_id] = preview_url
-            
             # Create tabs for different language groups
             if sorted_languages:
                 tabs = st.tabs(sorted_languages)
@@ -656,24 +671,41 @@ elif st.session_state.step == 4:
                             voice_name = voice.get("name", "Unnamed")
                             voice_gender = voice.get("gender", "Unspecified")
                             
+                            # Get preview URL from the accents list if available
+                            preview_url = ""
+                            accents = voice.get("accents", [])
+                            if accents and len(accents) > 0:
+                                preview_url = accents[0].get("preview_url", "")
+                                accent_name = accents[0].get("accent_name", "")
+                            
                             # Create a card for each voice
                             with st.container():
                                 # Voice card with name and properties
                                 st.markdown(f"### {voice_name}")
-                                st.markdown(f"""
-                                    <div>
-                                        <span class="bubble">Gender: {voice_gender}</span>
-                                        <span class="bubble">Language: {lang}</span>
-                                    </div>
-                                """, unsafe_allow_html=True)
+                                
+                                # Show voice characteristics as bubbles
+                                bubbles = [
+                                    f"Gender: {voice_gender}",
+                                    f"Language: {lang}"
+                                ]
+                                
+                                if accent_name:
+                                    bubbles.append(f"Accent: {accent_name}")
+                                    
+                                bubble_html = "<div>"
+                                for bubble in bubbles:
+                                    bubble_html += f'<span class="bubble">{bubble}</span> '
+                                bubble_html += "</div>"
+                                
+                                st.markdown(bubble_html, unsafe_allow_html=True)
                                 
                                 # Two column layout: audio player and selection button
                                 col1, col2 = st.columns([2, 1])
                                 
-                                # Display audio player if we have a sample for this voice
+                                # Display audio player if we have a preview URL
                                 with col1:
-                                    if voice_id in st.session_state.voice_samples:
-                                        st.audio(st.session_state.voice_samples[voice_id], format="audio/mp3")
+                                    if preview_url:
+                                        st.audio(preview_url, format="audio/mp3")
                                     else:
                                         st.info("Voice preview not available")
                                 
