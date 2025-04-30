@@ -137,27 +137,30 @@ Format your response as a JSON object with these fields:
 Keep the total word count under 200 words for the script portion.
 """
 
-        response = client.generate_text(
-            model="models/gemini-1.5-pro",
-            prompt=prompt,
-            temperature=0.7,
-            max_output_tokens=1024
+        # Use the generate_content method instead of generate_text
+        response = client.models.generate_content(
+            model="gemini-1.5-pro",
+            contents=prompt,
+            generation_config={"temperature": 0.7, "max_output_tokens": 1024}
         )
+        
+        # Get the response text from the response object
+        response_text = response.candidates[0].content.parts[0].text
         
         try:
             # Try to parse as JSON
-            screenplay_data = json.loads(response.text)
+            screenplay_data = json.loads(response_text)
             return screenplay_data, None
         except json.JSONDecodeError:
             # If not valid JSON, extract useful info using regex
-            title_match = re.search(r'"title":\s*"([^"]+)"', response.text)
+            title_match = re.search(r'"title":\s*"([^"]+)"', response_text)
             title = title_match.group(1) if title_match else "Untitled Screenplay"
             
-            screenplay_match = re.search(r'"screenplay":\s*"([^"]*)"', response.text, re.DOTALL)
-            screenplay = screenplay_match.group(1) if screenplay_match else response.text
+            screenplay_match = re.search(r'"screenplay":\s*"([^"]*)"', response_text, re.DOTALL)
+            screenplay = screenplay_match.group(1) if screenplay_match else response_text
             
             # Extract image prompts using regex
-            image_prompts_text = re.search(r'"image_prompts":\s*\[(.*?)\]', response.text, re.DOTALL)
+            image_prompts_text = re.search(r'"image_prompts":\s*\[(.*?)\]', response_text, re.DOTALL)
             if image_prompts_text:
                 # Clean up and split the prompts
                 prompts_text = image_prompts_text.group(1)
@@ -165,9 +168,9 @@ Keep the total word count under 200 words for the script portion.
                 image_prompts = re.findall(r'"(.*?)"', prompts_text)
             else:
                 # Fallback: Try to find lines that look like image prompts
-                image_prompts = re.findall(r'Image prompt.*?:\s*(.*?)(?:\n|$)', response.text)
+                image_prompts = re.findall(r'Image prompt.*?:\s*(.*?)(?:\n|$)', response_text)
             
-            script_match = re.search(r'"final_script":\s*"([^"]*)"', response.text, re.DOTALL)
+            script_match = re.search(r'"final_script":\s*"([^"]*)"', response_text, re.DOTALL)
             final_script = script_match.group(1) if script_match else ""
             
             # Construct JSON-like structure
@@ -361,7 +364,7 @@ with st.sidebar:
         st.session_state.image_urls = []
         st.session_state.link_data = None
         st.session_state.video_data = None
-        st.rerun()
+        st.experimental_rerun()
 
 # Step 1: Enter Campaign Details
 if st.session_state.step == 1:
@@ -394,7 +397,7 @@ if st.session_state.step == 1:
                     st.session_state.screenplay_data = screenplay_data
                     st.session_state.project_name = project_name
                     st.session_state.step = 2
-                    st.rerun()
+                    st.experimental_rerun()
 
 # Step 2: Display Screenplay and Confirm
 elif st.session_state.step == 2:
@@ -421,12 +424,12 @@ elif st.session_state.step == 2:
     # Edit screenplay if needed
     if st.button("Edit Screenplay"):
         st.session_state.step = 1
-        st.rerun()
+        st.experimental_rerun()
     
     # Proceed to image generation
     if st.button("Generate Images from Prompts"):
         st.session_state.step = 3
-        st.rerun()
+        st.experimental_rerun()
 
 # Step 3: Generate and Upload Images
 elif st.session_state.step == 3:
@@ -492,7 +495,7 @@ elif st.session_state.step == 3:
                 st.session_state.step = 4
                 status_text.empty()
                 st.success("All images generated and uploaded! Link created successfully.")
-                st.button("Continue to Video Creation", on_click=lambda: st.rerun())
+                st.button("Continue to Video Creation", on_click=lambda: st.experimental_rerun())
         else:
             st.error("No images were successfully generated and uploaded. Please try again.")
 
@@ -582,7 +585,7 @@ elif st.session_state.step == 4:
                     st.session_state.video_data = video_data
                     st.session_state.step = 5
                     st.success("Video creation initiated!")
-                    st.button("View Results", on_click=lambda: st.rerun())
+                    st.button("View Results", on_click=lambda: st.experimental_rerun())
     else:
         st.error("No personas available. Please check your API connection.")
 
@@ -593,7 +596,7 @@ elif st.session_state.step == 5:
     if not st.session_state.video_data:
         st.error("No video data available. Please go back and create a video.")
         st.session_state.step = 4
-        st.button("Go Back", on_click=lambda: st.rerun())
+        st.button("Go Back", on_click=lambda: st.experimental_rerun())
     else:
         # Get current status
         video_id = st.session_state.video_data.get("id")
@@ -645,7 +648,7 @@ elif st.session_state.step == 5:
                 
                 # Show refresh button
                 if st.button("Refresh Status"):
-                    st.rerun()
+                    st.experimental_rerun()
                 
                 # Show preview if available
                 preview_url = video_status.get("preview")
@@ -702,7 +705,7 @@ elif st.session_state.step == 5:
                 # Option to try again
                 if st.button("Try Again"):
                     st.session_state.step = 4
-                    st.rerun()
+                    st.experimental_rerun()
             
             # Render button (for pending/running status)
             if status != "done" and status != "failed":
@@ -715,7 +718,7 @@ elif st.session_state.step == 5:
                         else:
                             st.session_state.video_data = render_result
                             st.success("Rendering started!")
-                            st.rerun()
+                            st.experimental_rerun()
 
 # Footer
 st.markdown("""
