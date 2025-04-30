@@ -1,2 +1,4 @@
 elevenlabs
 crewai
+imagekitio
+google-genai
