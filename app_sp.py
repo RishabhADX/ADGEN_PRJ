@@ -204,6 +204,7 @@ Keep the total word count under 200 words for the script portion.
         return None, str(e)
 
 # Function to generate a voice preview
+# Function to generate a voice preview
 def generate_voice_preview(voice_id, text="This is a sample of how this voice sounds."):
     url = "https://api.creatify.ai/api/tts/"
     
@@ -596,7 +597,7 @@ elif st.session_state.step == 4:
             video_length = st.slider("Video Length (seconds)", 15, 60, 30)
             aspect_ratio = st.selectbox("Aspect Ratio", ["16x9", "1x1", "9x16"])
 
-            # In Step 4 (Create Video), replace the voice selection section with this enhanced version
+            # In Step 4 (Create Video), replace the voice selection section with this fixed version
             # Add this code right after the aspect_ratio selection
             
             # Get available voices
@@ -626,51 +627,40 @@ elif st.session_state.step == 4:
                 if sorted_languages:
                     tabs = st.tabs(sorted_languages)
                     
-                    selected_voice = None
                     for i, lang in enumerate(sorted_languages):
                         with tabs[i]:
                             lang_voices = voice_by_language[lang]
                             
-                            # Create a grid of voice options
-                            cols = st.columns(2)
+                            # Use a single-level column layout
                             for j, voice in enumerate(lang_voices):
-                                with cols[j % 2]:
-                                    voice_id = voice.get("voice_id")
-                                    voice_name = voice.get("name", "Unnamed")
-                                    voice_gender = voice.get("gender", "Unspecified")
-                                    
-                                    # Create a card for each voice
-                                    st.markdown(f"""
-                                    <div style="border:1px solid #ddd; border-radius:5px; padding:10px; margin:5px 0;">
-                                        <strong>{voice_name}</strong> ({voice_gender})
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    
-                                    # Voice preview button
-                                    preview_col, select_col = st.columns([1, 1])
-                                    with preview_col:
-                                        if st.button("Preview", key=f"preview_{voice_id}"):
-                                            with st.spinner("Generating preview..."):
-                                                preview_url, error = generate_voice_preview(voice_id)
-                                                if error:
-                                                    st.error(error)
-                                                elif preview_url:
-                                                    st.audio(preview_url, format="audio/mp3")
-                                                else:
-                                                    st.warning("No preview available")
+                                voice_id = voice.get("voice_id")
+                                voice_name = voice.get("name", "Unnamed")
+                                voice_gender = voice.get("gender", "Unspecified")
+                                
+                                # Create an expander for each voice - this is more space-efficient
+                                with st.expander(f"{voice_name} ({voice_gender})"):
+                                    # Preview button
+                                    if st.button("Preview Voice", key=f"preview_{voice_id}"):
+                                        with st.spinner("Generating preview..."):
+                                            preview_url, error = generate_voice_preview(voice_id)
+                                            if error:
+                                                st.error(error)
+                                            elif preview_url:
+                                                st.audio(preview_url, format="audio/mp3")
+                                            else:
+                                                st.warning("No preview available")
                                     
                                     # Select button
-                                    with select_col:
-                                        if st.button("Select", key=f"select_{voice_id}"):
-                                            selected_voice = voice_id
-                                            st.session_state.selected_voice = voice_id
-                                            st.session_state.selected_voice_name = voice_name
+                                    if st.button("Use This Voice", key=f"select_{voice_id}"):
+                                        st.session_state.selected_voice = voice_id
+                                        st.session_state.selected_voice_name = voice_name
+                                        st.success(f"Selected voice: {voice_name}")
                 else:
                     st.warning("No voices available")
             
             # Show the currently selected voice
             if 'selected_voice' in st.session_state:
-                st.success(f"Selected voice: {st.session_state.get('selected_voice_name', 'Unknown')}")
+                st.info(f"Currently selected voice: {st.session_state.get('selected_voice_name', 'Unknown')}")
                 
                 # Voice volume slider
                 voice_volume = st.slider("Voice Volume", 0.0, 1.0, 0.5, 0.1)
@@ -688,6 +678,8 @@ elif st.session_state.step == 4:
                 link_id = st.session_state.link_data.get("id")
                 script = st.session_state.screenplay_data.get("final_script")
                 
+                # Then update the create_video call to include the voice selection
+                # Replace the existing create_video call with:
                 # Then update the create_video call to include the voice selection
                 # Replace the existing create_video call with:
                 video_data, video_error = create_video(
