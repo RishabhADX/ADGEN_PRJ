@@ -605,33 +605,10 @@ elif st.session_state.step == 4:
 
         # Replace the voice selection section with this paginated version
 
+        # Fixed Voice Selection Section with properly saved selection
+
         # FIXED Voice Selection Section with Pagination
         st.subheader("Select Voice")
-        
-        # Updated function to get available voices with preview URLs
-        @st.cache_data(ttl=3600)
-        def get_voices():
-            url = "https://api.creatify.ai/api/voices/"
-            try:
-                response = requests.get(url, headers=headers)
-                return response.json()
-            except Exception as e:
-                st.error(f"Error fetching voices: {str(e)}")
-                # Return a fallback list of voices in case the API call fails
-                return [
-                    {"voice_id": "en-US-Wavenet-A", "name": "US Male", "gender": "Male", "language": "English (US)", 
-                     "accents": [{"accent_name": "US English", "preview_url": ""}]},
-                    {"voice_id": "en-US-Wavenet-C", "name": "US Female", "gender": "Female", "language": "English (US)",
-                     "accents": [{"accent_name": "US English", "preview_url": ""}]},
-                    {"voice_id": "en-GB-Wavenet-B", "name": "UK Male", "gender": "Male", "language": "English (UK)",
-                     "accents": [{"accent_name": "UK English", "preview_url": ""}]},
-                    {"voice_id": "en-GB-Wavenet-C", "name": "UK Female", "gender": "Female", "language": "English (UK)",
-                     "accents": [{"accent_name": "UK English", "preview_url": ""}]},
-                    {"voice_id": "es-ES-Wavenet-B", "name": "Spanish Male", "gender": "Male", "language": "Spanish",
-                     "accents": [{"accent_name": "Spanish", "preview_url": ""}]},
-                    {"voice_id": "fr-FR-Wavenet-C", "name": "French Female", "gender": "Female", "language": "French",
-                     "accents": [{"accent_name": "French", "preview_url": ""}]}
-                ]
         
         # Get voices with their preview URLs
         voices = get_voices()
@@ -674,7 +651,7 @@ elif st.session_state.step == 4:
                         lang_voices = voice_by_language[lang]
                         
                         # Pagination settings
-                        voices_per_page = 10  # Show 10 voices per page
+                        voices_per_page = 3  # Show 3 voices per page
                         total_pages = (len(lang_voices) + voices_per_page - 1) // voices_per_page
                         
                         # Start and end indices for current page
@@ -700,10 +677,18 @@ elif st.session_state.step == 4:
                                 preview_url = accents[0].get("preview_url", "")
                                 accent_name = accents[0].get("accent_name", "")
                             
+                            # Check if this voice is currently selected
+                            is_selected = st.session_state.selected_voice == voice_id
+                            
                             # Create a card for each voice
                             with st.container():
                                 # Voice card with name and properties
-                                st.markdown(f"### {voice_name}")
+                                title_col, status_col = st.columns([3, 1])
+                                with title_col:
+                                    st.markdown(f"### {voice_name}")
+                                with status_col:
+                                    if is_selected:
+                                        st.markdown("✅ **Selected**")
                                 
                                 # Show voice characteristics as bubbles
                                 bubbles = [
@@ -731,12 +716,16 @@ elif st.session_state.step == 4:
                                     else:
                                         st.info("Voice preview not available")
                                 
-                                # Select button with unique key
+                                # Select button with unique key - with different text if already selected
                                 with col2:
-                                    if st.button("Use This Voice", key=f"select_{lang}_{voice_idx}"):
+                                    button_text = "Selected" if is_selected else "Use This Voice"
+                                    button_disabled = is_selected
+                                    
+                                    if st.button(button_text, key=f"select_{lang}_{voice_idx}", disabled=button_disabled):
+                                        # Save both the voice_id and name in session state
                                         st.session_state.selected_voice = voice_id
                                         st.session_state.selected_voice_name = voice_name
-                                        st.success(f"Selected voice: {voice_name}")
+                                        st.rerun()  # Refresh to show the updated selection
                                 
                                 # Add separator between voices
                                 st.markdown("---")
@@ -774,7 +763,7 @@ elif st.session_state.step == 4:
             
             # Display currently selected voice
             if st.session_state.selected_voice:
-                st.info(f"Currently selected voice: {st.session_state.selected_voice_name}")
+                st.success(f"Currently selected voice: {st.session_state.selected_voice_name} (ID: {st.session_state.selected_voice})")
                 
                 # Voice volume slider
                 voice_volume = st.slider("Voice Volume", 0.0, 1.0, 0.5, 0.1)
@@ -782,6 +771,7 @@ elif st.session_state.step == 4:
             else:
                 st.info("No voice selected yet. Default voice will be used.")
                 st.session_state.voice_volume = 0.5
+
         
         # Create video button
         if st.button("Create Video") and selected_persona and st.session_state.link_data:
