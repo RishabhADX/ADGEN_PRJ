@@ -605,129 +605,171 @@ elif st.session_state.step == 4:
 
         # Simplified voice selection with direct radio buttons and audio players
 
-        # FIXED Voice Selection Section
+        # Voice Selection Section
         st.subheader("Select Voice")
         
         # Get voices with their preview URLs
         voices = get_voices()
         
-        # Initialize session state for voice selection if not present
+        # Initialize session state variables for voice selection if not present
         if 'selected_voice' not in st.session_state:
             st.session_state.selected_voice = ""
             st.session_state.selected_voice_name = ""
         
-        # Create voice selection section with embedded audio players
+        # Initialize pagination state
+        if 'voice_page' not in st.session_state:
+            st.session_state.voice_page = 0
+        
+        # Create voice selection section with pagination
         if not voices:
             st.warning("No voices available")
         else:
-            # Group voices by language for better organization
-            voice_by_language = {}
-            for voice in voices:
-                lang = voice.get("language", "Other")
-                if lang not in voice_by_language:
-                    voice_by_language[lang] = []
-                voice_by_language[lang].append(voice)
+            # Define page size and calculate total pages
+            page_size = 10
+            total_pages = (len(voices) + page_size - 1) // page_size
             
-            # Sort languages alphabetically
-            sorted_languages = sorted(voice_by_language.keys())
+            # Display pagination controls
+            col1, col2, col3 = st.columns([1, 3, 1])
             
-            # Create tabs for different language groups
-            if sorted_languages:
-                tabs = st.tabs(sorted_languages)
+            with col1:
+                if st.button("Previous", key="prev_voice_page", disabled=st.session_state.voice_page <= 0):
+                    st.session_state.voice_page -= 1
+                    st.rerun()
+                    
+            with col2:
+                st.write(f"Page {st.session_state.voice_page + 1} of {max(1, total_pages)}")
                 
-                for tab_idx, lang in enumerate(sorted_languages):
-                    with tabs[tab_idx]:
-                        lang_voices = voice_by_language[lang]
+            with col3:
+                if st.button("Next", key="next_voice_page", disabled=st.session_state.voice_page >= total_pages - 1):
+                    st.session_state.voice_page += 1
+                    st.rerun()
+            
+            # Calculate slice of voices to display on current page
+            start_idx = st.session_state.voice_page * page_size
+            end_idx = min(start_idx + page_size, len(voices))
+            page_voices = voices[start_idx:end_idx]
+            
+            # Display filter options
+            st.write("#### Filter Options")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                filter_gender = st.selectbox("Gender", ["All", "Male", "Female"], key="voice_filter_gender")
+            
+            with col2:
+                # Extract all unique languages from voices
+                all_languages = sorted(set(voice.get("language", "Unknown") for voice in voices))
+                filter_language = st.selectbox("Language", ["All"] + all_languages, key="voice_filter_language")
+            
+            # Filter voices based on selected criteria
+            filtered_voices = page_voices
+            if filter_gender != "All":
+                filtered_voices = [v for v in filtered_voices if v.get("gender", "") == filter_gender]
+            
+            if filter_language != "All":
+                filtered_voices = [v for v in filtered_voices if v.get("language", "") == filter_language]
+            
+            # Show message if no voices match filters
+            if not filtered_voices:
+                st.warning("No voices match your filters. Try different filter options.")
+            
+            # Display each voice with its audio player
+            for voice in filtered_voices:
+                voice_id = voice.get("voice_id", "")
+                voice_name = voice.get("name", "Unnamed")
+                voice_gender = voice.get("gender", "Unspecified")
+                voice_language = voice.get("language", "Unknown")
+                
+                # Get preview URL if available
+                preview_url = ""
+                accent_name = ""
+                accents = voice.get("accents", [])
+                if accents and len(accents) > 0:
+                    preview_url = accents[0].get("preview_url", "")
+                    accent_name = accents[0].get("accent_name", "")
+                
+                # Check if this is the selected voice
+                is_selected = st.session_state.selected_voice == voice_id
+                
+                # Create a card for each voice
+                with st.container():
+                    st.markdown("""
+                    <style>
+                    .voice-card {
+                        border: 1px solid #e0e0e0;
+                        border-radius: 10px;
+                        padding: 15px;
+                        margin-bottom: 15px;
+                        background-color: white;
+                        position: relative;
+                    }
+                    .selected-badge {
+                        position: absolute;
+                        top: 10px;
+                        right: 10px;
+                        background-color: #28a745;
+                        color: white;
+                        padding: 5px 10px;
+                        border-radius: 5px;
+                        font-weight: bold;
+                    }
+                    </style>
+                    """, unsafe_allow_html=True)
+                    
+                    # Create a card div with conditional selected badge
+                    selected_badge = '<div class="selected-badge">✓ Selected</div>' if is_selected else ''
+                    st.markdown(f'<div class="voice-card">{selected_badge}', unsafe_allow_html=True)
+                    
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        # Voice name and properties
+                        st.markdown(f"### {voice_name}")
                         
-                        # Display voices with radio buttons and audio players
-                        st.write("#### Select a voice from this language:")
+                        # Show voice characteristics as bubbles
+                        bubbles = [
+                            f"Gender: {voice_gender}",
+                            f"Language: {voice_language}"
+                        ]
                         
-                        # Create radio options for this language
-                        voice_options = []
-                        for voice in lang_voices:
-                            voice_name = voice.get("name", "Unnamed")
-                            voice_options.append(voice_name)
-                        
-                        # Find the index of the currently selected voice in this language
-                        selected_index = 0  # Default to first option
-                        
-                        if st.session_state.selected_voice:
-                            # Try to find the index of the selected voice in this language tab
-                            for i, voice in enumerate(lang_voices):
-                                if voice.get("voice_id") == st.session_state.selected_voice:
-                                    selected_index = i
-                                    break
-                        
-                        # Create a radio button group for selection
-                        # Only show if we have options
-                        if voice_options:
-                            selected_voice_name = st.radio(
-                                "Select a voice:",
-                                options=voice_options,
-                                index=selected_index,
-                                key=f"voice_select_{lang}"
-                            )
+                        if accent_name:
+                            bubbles.append(f"Accent: {accent_name}")
                             
-                            # Find the voice ID for the selected name and update selection
-                            for voice in lang_voices:
-                                if voice.get("name") == selected_voice_name:
-                                    st.session_state.selected_voice = voice.get("voice_id", "")
-                                    st.session_state.selected_voice_name = selected_voice_name
-                                    break
-                        else:
-                            st.warning("No voices available in this language.")
+                        bubble_html = "<div>"
+                        for bubble in bubbles:
+                            bubble_html += f'<span class="bubble">{bubble}</span> '
+                        bubble_html += "</div>"
                         
-                        # Display each voice with its audio player
-                        for voice in lang_voices:
-                            voice_id = voice.get("voice_id", "")
-                            voice_name = voice.get("name", "Unnamed")
-                            voice_gender = voice.get("gender", "Unspecified")
+                        st.markdown(bubble_html, unsafe_allow_html=True)
+                    
+                    with col2:
+                        # Select button
+                        if st.button("Select", key=f"select_voice_{voice_id}", 
+                                   disabled=is_selected,
+                                   help="Click to select this voice"):
+                            st.session_state.selected_voice = voice_id
+                            st.session_state.selected_voice_name = voice_name
+                            st.rerun()
+                    
+                    # Display audio player if we have a preview URL
+                    if preview_url:
+                        st.audio(preview_url, format="audio/mp3")
+                    else:
+                        with st.expander("Generate voice preview"):
+                            preview_text = st.text_input("Enter text for preview", 
+                                                       "Hello, this is a sample of how this voice sounds.", 
+                                                       key=f"preview_text_{voice_id}")
                             
-                            # Get preview URL from the accents list if available
-                            preview_url = ""
-                            accent_name = ""
-                            accents = voice.get("accents", [])
-                            if accents and len(accents) > 0:
-                                preview_url = accents[0].get("preview_url", "")
-                                accent_name = accents[0].get("accent_name", "")
-                            
-                            # Check if this is the selected voice
-                            is_selected = st.session_state.selected_voice == voice_id
-                            
-                            # Create a card for each voice
-                            with st.container():
-                                # Voice card with name and properties
-                                col1, col2 = st.columns([3, 1])
-                                with col1:
-                                    st.markdown(f"### {voice_name}")
-                                with col2:
-                                    if is_selected:
-                                        st.markdown("✅ **Selected**")
-                                
-                                # Show voice characteristics as bubbles
-                                bubbles = [
-                                    f"Gender: {voice_gender}",
-                                    f"Language: {lang}"
-                                ]
-                                
-                                if accent_name:
-                                    bubbles.append(f"Accent: {accent_name}")
+                            if st.button("Generate Preview", key=f"gen_preview_{voice_id}"):
+                                with st.spinner("Generating voice preview..."):
+                                    preview_url, preview_error = generate_voice_preview(voice_id, preview_text)
                                     
-                                bubble_html = "<div>"
-                                for bubble in bubbles:
-                                    bubble_html += f'<span class="bubble">{bubble}</span> '
-                                bubble_html += "</div>"
-                                
-                                st.markdown(bubble_html, unsafe_allow_html=True)
-                                
-                                # Display audio player if we have a preview URL
-                                if preview_url:
-                                    st.audio(preview_url, format="audio/mp3")
-                                else:
-                                    st.info("Voice preview not available")
-                                
-                                # Add separator between voices
-                                st.markdown("---")
+                                    if preview_error:
+                                        st.error(preview_error)
+                                    elif preview_url:
+                                        st.audio(preview_url, format="audio/mp3")
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
             
             # Display currently selected voice with clear feedback
             if st.session_state.selected_voice:
