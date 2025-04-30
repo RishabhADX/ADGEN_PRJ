@@ -607,6 +607,8 @@ elif st.session_state.step == 4:
 
         # Fixed Voice Selection Section with properly saved selection
 
+        # Complete fixed voice selection section with proper ID handling
+
         # FIXED Voice Selection Section with Pagination
         st.subheader("Select Voice")
         
@@ -665,7 +667,7 @@ elif st.session_state.step == 4:
                         # Display only the voices for the current page
                         for voice_idx in range(start_idx, end_idx):
                             voice = lang_voices[voice_idx]
-                            voice_id = voice.get("voice_id")
+                            voice_id = voice.get("voice_id", "")
                             voice_name = voice.get("name", "Unnamed")
                             voice_gender = voice.get("gender", "Unspecified")
                             
@@ -677,8 +679,10 @@ elif st.session_state.step == 4:
                                 preview_url = accents[0].get("preview_url", "")
                                 accent_name = accents[0].get("accent_name", "")
                             
-                            # Check if this voice is currently selected
-                            is_selected = st.session_state.selected_voice == voice_id
+                            # Fix: Use a consistent format for comparison - ensure both are strings and trim whitespace
+                            current_voice_id = str(voice_id).strip() if voice_id else ""
+                            selected_voice_id = str(st.session_state.selected_voice).strip() if st.session_state.selected_voice else ""
+                            is_selected = current_voice_id and selected_voice_id and current_voice_id == selected_voice_id
                             
                             # Create a card for each voice
                             with st.container():
@@ -721,9 +725,9 @@ elif st.session_state.step == 4:
                                     button_text = "Selected" if is_selected else "Use This Voice"
                                     button_disabled = is_selected
                                     
+                                    # Store the voice ID directly in the button handler 
                                     if st.button(button_text, key=f"select_{lang}_{voice_idx}", disabled=button_disabled):
-                                        # Save both the voice_id and name in session state
-                                        st.session_state.selected_voice = voice_id
+                                        st.session_state.selected_voice = current_voice_id
                                         st.session_state.selected_voice_name = voice_name
                                         st.rerun()  # Refresh to show the updated selection
                                 
@@ -761,13 +765,10 @@ elif st.session_state.step == 4:
                                         st.session_state.voice_pagination[lang] = current_page + 1
                                         st.rerun()
             
-            # Display currently selected voice
+            # Display currently selected voice with ID for debugging
             if st.session_state.selected_voice:
-                st.success(f"Currently selected voice: {st.session_state.selected_voice_name} (ID: {st.session_state.selected_voice})")
-                
-                # Voice volume slider
-                voice_volume = st.slider("Voice Volume", 0.0, 1.0, 0.5, 0.1)
-                st.session_state.voice_volume = voice_volume
+                st.success(f"Currently selected voice: {st.session_state.selected_voice_name}")
+                st.session_state.voice_volume = st.slider("Voice Volume", 0.0, 1.0, 0.5, 0.1)
             else:
                 st.info("No voice selected yet. Default voice will be used.")
                 st.session_state.voice_volume = 0.5
