@@ -579,6 +579,41 @@ elif st.session_state.step == 4:
         with col2:
             video_length = st.slider("Video Length (seconds)", 15, 60, 30)
             aspect_ratio = st.selectbox("Aspect Ratio", ["16x9", "1x1", "9x16"])
+
+            # In Step 4 (Create Video), we need to add the voice selection UI
+            # Add this code right after the aspect_ratio selection
+            
+            # Get available voices
+            voices = get_voices()
+            
+            # Display voice selection
+            st.subheader("Select Voice")
+            voice_cols = st.columns(2)
+            
+            with voice_cols[0]:
+                # Filter voices by selected language if needed
+                filtered_voices = [v for v in voices if language in v.get("voice_id", "").lower()] if language else voices
+                if not filtered_voices and voices:
+                    # Fallback to all voices if no matches for language
+                    filtered_voices = voices
+                    st.warning(f"No voices found for {language} language. Showing all available voices.")
+                
+                voice_options = [(v.get("voice_id"), f"{v.get('name')} ({v.get('gender')}, {v.get('language')})") 
+                                 for v in filtered_voices]
+                
+                # Add a "None" option
+                voice_options = [("", "Default Voice")] + voice_options
+                
+                # Get voice IDs and display names
+                voice_ids, voice_names = zip(*voice_options) if voice_options else ([""], ["No voices available"])
+                
+                # Create the selectbox
+                selected_voice_index = st.selectbox("Voice", range(len(voice_ids)), 
+                                                   format_func=lambda i: voice_names[i])
+                selected_voice = voice_ids[selected_voice_index]
+            
+            with voice_cols[1]:
+                voice_volume = st.slider("Voice Volume", 0.0, 1.0, 0.5, 0.1)
         
         # Create video button
         if st.button("Create Video") and selected_persona and st.session_state.link_data:
@@ -587,15 +622,17 @@ elif st.session_state.step == 4:
                 script = st.session_state.screenplay_data.get("final_script")
                 
                 video_data, video_error = create_video(
-                    link_id,
-                    st.session_state.project_name,
-                    script,
-                    selected_persona,
-                    platform=platform,
-                    language=language,
-                    length=video_length,
-                    ratio=aspect_ratio
-                )
+                link_id,
+                st.session_state.project_name,
+                script,
+                selected_persona,
+                platform=platform,
+                language=language,
+                length=video_length,
+                ratio=aspect_ratio,
+                voice_id=selected_voice,  # Add the selected voice
+                volume=voice_volume  # Add the voice volume
+            )
                 
                 if video_error:
                     st.error(video_error)
