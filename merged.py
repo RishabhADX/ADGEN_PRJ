@@ -614,7 +614,7 @@ elif st.session_state.step == 4:
             st.session_state.selected_voice = ""
             st.session_state.selected_voice_name = ""
             
-        # Create voice selection section with unique keys
+        # Create voice selection section with embedded audio players
         if not voices:
             st.warning("No voices available")
         else:
@@ -628,6 +628,19 @@ elif st.session_state.step == 4:
             
             # Sort languages alphabetically
             sorted_languages = sorted(voice_by_language.keys())
+            
+            # Pre-generate audio samples for all voices
+            if 'voice_samples' not in st.session_state:
+                st.session_state.voice_samples = {}
+                
+                with st.spinner("Loading voice samples..."):
+                    for lang in sorted_languages:
+                        for voice in voice_by_language[lang]:
+                            voice_id = voice.get("voice_id")
+                            # Generate the preview URL but don't display it yet
+                            preview_url, error = generate_voice_preview(voice_id)
+                            if not error and preview_url:
+                                st.session_state.voice_samples[voice_id] = preview_url
             
             # Create tabs for different language groups
             if sorted_languages:
@@ -643,39 +656,36 @@ elif st.session_state.step == 4:
                             voice_name = voice.get("name", "Unnamed")
                             voice_gender = voice.get("gender", "Unspecified")
                             
-                            # Voice card with name and properties
-                            st.markdown(f"### {voice_name}")
-                            st.markdown(f"""
-                                <div>
-                                    <span class="bubble">Gender: {voice_gender}</span>
-                                    <span class="bubble">Language: {lang}</span>
-                                </div>
-                            """, unsafe_allow_html=True)
-                            
-                            # Actions in columns
-                            preview_col, select_col = st.columns(2)
-                            
-                            # Preview button with unique key
-                            with preview_col:
-                                if st.button("Preview Voice", key=f"preview_{lang}_{voice_idx}"):
-                                    with st.spinner("Generating preview..."):
-                                        preview_url, error = generate_voice_preview(voice_id)
-                                        if error:
-                                            st.error(error)
-                                        elif preview_url:
-                                            st.audio(preview_url, format="audio/mp3")
-                                        else:
-                                            st.warning("No preview available")
-                            
-                            # Select button with unique key
-                            with select_col:
-                                if st.button("Use This Voice", key=f"select_{lang}_{voice_idx}"):
-                                    st.session_state.selected_voice = voice_id
-                                    st.session_state.selected_voice_name = voice_name
-                                    st.success(f"Selected voice: {voice_name}")
-                            
-                            # Add separator between voices
-                            st.markdown("---")
+                            # Create a card for each voice
+                            with st.container():
+                                # Voice card with name and properties
+                                st.markdown(f"### {voice_name}")
+                                st.markdown(f"""
+                                    <div>
+                                        <span class="bubble">Gender: {voice_gender}</span>
+                                        <span class="bubble">Language: {lang}</span>
+                                    </div>
+                                """, unsafe_allow_html=True)
+                                
+                                # Two column layout: audio player and selection button
+                                col1, col2 = st.columns([2, 1])
+                                
+                                # Display audio player if we have a sample for this voice
+                                with col1:
+                                    if voice_id in st.session_state.voice_samples:
+                                        st.audio(st.session_state.voice_samples[voice_id], format="audio/mp3")
+                                    else:
+                                        st.info("Voice preview not available")
+                                
+                                # Select button with unique key
+                                with col2:
+                                    if st.button("Use This Voice", key=f"select_{lang}_{voice_idx}"):
+                                        st.session_state.selected_voice = voice_id
+                                        st.session_state.selected_voice_name = voice_name
+                                        st.success(f"Selected voice: {voice_name}")
+                                
+                                # Add separator between voices
+                                st.markdown("---")
             
             # Display currently selected voice
             if st.session_state.selected_voice:
