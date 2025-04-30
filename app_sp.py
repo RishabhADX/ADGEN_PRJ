@@ -277,20 +277,6 @@ def generate_script(prompt):
     # Return the formatted screenplay for display
     return result["screenplay"]
 
-FADE IN:
-
-EXT. CITY STREET - DAY
-
-A bustling city street with people hurrying about their day.
-
-NARRATOR (V.O.)
-In a world where technology and humanity intersect...
-
-[Character descriptions and additional scenes would follow...]
-
-FADE OUT.
-"""
-
 def generate_audio(script, voice_id):
     # In a real implementation, this would call your AI API
     time.sleep(2)  # Simulate API call
