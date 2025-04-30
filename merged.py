@@ -95,7 +95,8 @@ headers = {
 
 # Initialize Gemini client
 try:
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    genai.configure(api_key=GEMINI_API_KEY)
+    client = genai.GenerativeModel("gemini-1.5-pro")
 except Exception as e:
     st.error(f"Failed to initialize Gemini: {str(e)}")
 
@@ -164,12 +165,10 @@ Keep the total word count under 200 words for the script portion.
 """
 
         # Use the generate_content method instead of generate_text
-        response = client.models.generate_content(
-            model="gemini-1.5-pro",
-            contents=prompt        )
+        response = client.generate_content(prompt)
         
         # Get the response text from the response object
-        response_text = response.candidates[0].content.parts[0].text
+        response_text = response.text
         
         try:
             # Try to parse as JSON
@@ -229,19 +228,18 @@ def generate_voice_preview(voice_id, text="This is a sample of how this voice so
 # Function to generate image with Gemini
 def generate_image(prompt):
     try:
-        response = client.models.generate_content(
-            model="gemini-2.0-flash-exp-image-generation",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=['TEXT', 'IMAGE']
-            )
-        )
+        # Configure the generative model for image generation
+        image_model = genai.GenerativeModel('gemini-1.5-flash')
         
-        if not response.candidates or not response.candidates[0].content.parts:
+        # Generate the image
+        response = image_model.generate_content(prompt)
+        
+        # Check if there's content in the response
+        if not hasattr(response, 'parts') or not response.parts:
             return None, "No content generated"
             
-        for part in response.candidates[0].content.parts:
-            if getattr(part, "inline_data", None):
+        for part in response.parts:
+            if hasattr(part, 'inline_data') and part.inline_data:
                 return part.inline_data.data, None
         
         return None, "No image found in response"
@@ -603,13 +601,8 @@ elif st.session_state.step == 4:
             video_length = st.slider("Video Length (seconds)", 15, 60, 30)
             aspect_ratio = st.selectbox("Aspect Ratio", ["16x9", "1x1", "9x16"])
 
-        # Simplified voice selection with direct radio buttons and audio players
-
         # Voice Selection Section
         st.subheader("Select Voice")
-        
-        # Get voices with their preview URLs
-        voices = get_voices()
         
         # Initialize session state variables for voice selection if not present
         if 'selected_voice' not in st.session_state:
@@ -619,6 +612,9 @@ elif st.session_state.step == 4:
         # Initialize pagination state
         if 'voice_page' not in st.session_state:
             st.session_state.voice_page = 0
+        
+        # Get voices with their preview URLs
+        voices = get_voices()
         
         # Create voice selection section with pagination
         if not voices:
@@ -693,16 +689,9 @@ elif st.session_state.step == 4:
                 
                 # Create a card for each voice
                 with st.container():
+                    # Create a card div with conditional selected badge
                     st.markdown("""
                     <style>
-                    .voice-card {
-                        border: 1px solid #e0e0e0;
-                        border-radius: 10px;
-                        padding: 15px;
-                        margin-bottom: 15px;
-                        background-color: white;
-                        position: relative;
-                    }
                     .selected-badge {
                         position: absolute;
                         top: 10px;
@@ -716,7 +705,6 @@ elif st.session_state.step == 4:
                     </style>
                     """, unsafe_allow_html=True)
                     
-                    # Create a card div with conditional selected badge
                     selected_badge = '<div class="selected-badge">✓ Selected</div>' if is_selected else ''
                     st.markdown(f'<div class="voice-card">{selected_badge}', unsafe_allow_html=True)
                     
@@ -757,8 +745,8 @@ elif st.session_state.step == 4:
                     else:
                         with st.expander("Generate voice preview"):
                             preview_text = st.text_input("Enter text for preview", 
-                                                       "Hello, this is a sample of how this voice sounds.", 
-                                                       key=f"preview_text_{voice_id}")
+                                                      "Hello, this is a sample of how this voice sounds.", 
+                                                      key=f"preview_text_{voice_id}")
                             
                             if st.button("Generate Preview", key=f"gen_preview_{voice_id}"):
                                 with st.spinner("Generating voice preview..."):
@@ -810,141 +798,3 @@ elif st.session_state.step == 4:
                     st.button("View Results", on_click=lambda: st.rerun())
     else:
         st.error("No personas available. Please check your API connection.")
-
-# Step 5: View Results
-elif st.session_state.step == 5:
-    st.header("Video Results")
-    
-    if not st.session_state.video_data:
-        st.error("No video data available. Please go back and create a video.")
-        st.session_state.step = 4
-        st.button("Go Back", on_click=lambda: st.rerun())
-    else:
-        # Get current status
-        video_id = st.session_state.video_data.get("id")
-        video_status, status_error = get_video_status(video_id)
-        
-        if status_error:
-            st.error(status_error)
-        else:
-            # Update session state
-            st.session_state.video_data = video_status
-            
-            # Display status card
-            status = video_status.get("status", "unknown")
-            progress = video_status.get("progress", 0)
-            
-            st.markdown(f"""
-                <div class="card">
-                    <h3>Video Status</h3>
-                    <p><strong>Project:</strong> {st.session_state.project_name}</p>
-                    <p><strong>Status:</strong> {status}</p>
-                    <p><strong>Progress:</strong> {progress*100:.0f}%</p>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            st.progress(progress)
-            
-            # Show characteristics in bubbles
-            st.subheader("Video Characteristics")
-            
-            characteristics = [
-                f"Platform: {video_status.get('target_platform', 'unknown')}",
-                f"Audience: {video_status.get('target_audience', 'unknown')}",
-                f"Length: {video_status.get('video_length', 0)} seconds",
-                f"Aspect Ratio: {video_status.get('aspect_ratio', 'unknown')}",
-                f"Language: {video_status.get('language', 'unknown')}",
-                f"Style: {video_status.get('visual_style', 'unknown')}"
-            ]
-            
-            bubble_html = "<div>"
-            for char in characteristics:
-                bubble_html += f'<div class="bubble">{char}</div> '
-            bubble_html += "</div>"
-            
-            st.markdown(bubble_html, unsafe_allow_html=True)
-            
-            # Check status and show appropriate content
-            if status == "pending" or status == "running":
-                st.info("Your video is being processed. This may take a few minutes.")
-                
-                # Show refresh button
-                if st.button("Refresh Status"):
-                    st.rerun()
-                
-                # Show preview if available
-                preview_url = video_status.get("preview")
-                if preview_url:
-                    st.subheader("Preview")
-                    st.markdown(f"""
-                        <div class="card">
-                            <p>View your video preview:</p>
-                            <a href="{preview_url}" target="_blank" class="stButton">
-                                <button>Open Preview</button>
-                            </a>
-                        </div>
-                    """, unsafe_allow_html=True)
-            
-            elif status == "done":
-                st.success("Your video is ready!")
-                
-                # Display the video
-                video_url = video_status.get("video_output")
-                if video_url:
-                    st.subheader("Your Video")
-                    st.markdown(f"""
-                        <div class="video-container">
-                            <video width="100%" controls>
-                                <source src="{video_url}" type="video/mp4">
-                                Your browser does not support video playback.
-                            </video>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Download button
-                    st.download_button(
-                        label="Download Video",
-                        data=requests.get(video_url).content,
-                        file_name=f"{st.session_state.project_name.replace(' ', '_')}.mp4",
-                        mime="video/mp4"
-                    )
-                    
-                    # Show script for reference
-                    st.subheader("Script")
-                    st.markdown(f"""
-                        <div class="card">
-                            <p>{st.session_state.screenplay_data.get('final_script')}</p>
-                        </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.warning("Video URL not available. There might be an issue with the video.")
-            
-            elif status == "failed":
-                st.error("Video creation failed.")
-                failed_reason = video_status.get("failed_reason", "Unknown reason")
-                st.write(f"Reason: {failed_reason}")
-                
-                # Option to try again
-                if st.button("Try Again"):
-                    st.session_state.step = 4
-                    st.rerun()
-            
-            # Render button (for pending/running status)
-            if status != "done" and status != "failed":
-                if st.button("Render Final Video"):
-                    with st.spinner("Rendering video..."):
-                        render_result, render_error = render_video(video_id)
-                        
-                        if render_error:
-                            st.error(render_error)
-                        else:
-                            st.session_state.video_data = render_result
-                            st.success("Rendering started!")
-                            st.rerun()
-
-# Footer
-st.markdown("""
-<div style="text-align: center; margin-top: 2rem; padding: 1rem; background-color: #f8f9fa; border-radius: 10px;">
-    <p>Complete AI Video Pipeline: Brief → Screenplay → Images → Video</p>
-</div>
-""", unsafe_allow_html=True)
