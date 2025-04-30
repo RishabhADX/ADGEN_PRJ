@@ -12,7 +12,7 @@ from PIL import Image
 from io import BytesIO
 import base64
 import uuid
-from imagekitio import ImageKit
+# from imagekitio import ImageKit
 import requests
 import json
 
