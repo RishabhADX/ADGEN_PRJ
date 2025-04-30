@@ -93,12 +93,11 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# # Initialize Gemini client
-# try:
-#     genai.configure(api_key=GEMINI_API_KEY)
-#     client = genai.GenerativeModel("gemini-1.5-pro")
-# except Exception as e:
-#     st.error(f"Failed to initialize Gemini: {str(e)}")
+# Initialize Gemini client
+try:
+    client = genai.Client(api_key=GEMINI_API_KEY)
+except Exception as e:
+    st.error(f"Failed to initialize Gemini: {str(e)}")
 
 # Function to get available personas
 @st.cache_data(ttl=3600)
@@ -165,10 +164,12 @@ Keep the total word count under 200 words for the script portion.
 """
 
         # Use the generate_content method instead of generate_text
-        response = client.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-1.5-pro",
+            contents=prompt        )
         
         # Get the response text from the response object
-        response_text = response.text
+        response_text = response.candidates[0].content.parts[0].text
         
         try:
             # Try to parse as JSON
@@ -228,18 +229,19 @@ def generate_voice_preview(voice_id, text="This is a sample of how this voice so
 # Function to generate image with Gemini
 def generate_image(prompt):
     try:
-        # Configure the generative model for image generation
-        image_model = genai.GenerativeModel('gemini-1.5-flash')
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp-image-generation",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=['TEXT', 'IMAGE']
+            )
+        )
         
-        # Generate the image
-        response = image_model.generate_content(prompt)
-        
-        # Check if there's content in the response
-        if not hasattr(response, 'parts') or not response.parts:
+        if not response.candidates or not response.candidates[0].content.parts:
             return None, "No content generated"
             
-        for part in response.parts:
-            if hasattr(part, 'inline_data') and part.inline_data:
+        for part in response.candidates[0].content.parts:
+            if getattr(part, "inline_data", None):
                 return part.inline_data.data, None
         
         return None, "No image found in response"
@@ -601,174 +603,175 @@ elif st.session_state.step == 4:
             video_length = st.slider("Video Length (seconds)", 15, 60, 30)
             aspect_ratio = st.selectbox("Aspect Ratio", ["16x9", "1x1", "9x16"])
 
-        # Voice Selection Section
+        # Replace the voice selection section with this paginated version
+
+        # Fixed Voice Selection Section with properly saved selection
+
+        # FIXED Voice Selection Section with Pagination
         st.subheader("Select Voice")
-        
-        # Initialize session state variables for voice selection if not present
-        if 'selected_voice' not in st.session_state:
-            st.session_state.selected_voice = ""
-            st.session_state.selected_voice_name = ""
-        
-        # Initialize pagination state
-        if 'voice_page' not in st.session_state:
-            st.session_state.voice_page = 0
         
         # Get voices with their preview URLs
         voices = get_voices()
         
-        # Create voice selection section with pagination
+        # Check if we already have a selected voice in session state
+        if 'selected_voice' not in st.session_state:
+            st.session_state.selected_voice = ""
+            st.session_state.selected_voice_name = ""
+        
+        # Initialize pagination state for each language if not already present
+        if 'voice_pagination' not in st.session_state:
+            st.session_state.voice_pagination = {}
+        
+        # Create voice selection section with embedded audio players and pagination
         if not voices:
             st.warning("No voices available")
         else:
-            # Define page size and calculate total pages
-            page_size = 10
-            total_pages = (len(voices) + page_size - 1) // page_size
+            # Group voices by language for better organization
+            voice_by_language = {}
+            for voice in voices:
+                lang = voice.get("language", "Other")
+                if lang not in voice_by_language:
+                    voice_by_language[lang] = []
+                voice_by_language[lang].append(voice)
             
-            # Display pagination controls
-            col1, col2, col3 = st.columns([1, 3, 1])
+            # Sort languages alphabetically
+            sorted_languages = sorted(voice_by_language.keys())
             
-            with col1:
-                if st.button("Previous", key="prev_voice_page", disabled=st.session_state.voice_page <= 0):
-                    st.session_state.voice_page -= 1
-                    st.rerun()
-                    
-            with col2:
-                st.write(f"Page {st.session_state.voice_page + 1} of {max(1, total_pages)}")
+            # Initialize pagination for any new languages
+            for lang in sorted_languages:
+                if lang not in st.session_state.voice_pagination:
+                    st.session_state.voice_pagination[lang] = 0
+            
+            # Create tabs for different language groups
+            if sorted_languages:
+                tabs = st.tabs(sorted_languages)
                 
-            with col3:
-                if st.button("Next", key="next_voice_page", disabled=st.session_state.voice_page >= total_pages - 1):
-                    st.session_state.voice_page += 1
-                    st.rerun()
-            
-            # Calculate slice of voices to display on current page
-            start_idx = st.session_state.voice_page * page_size
-            end_idx = min(start_idx + page_size, len(voices))
-            page_voices = voices[start_idx:end_idx]
-            
-            # Display filter options
-            st.write("#### Filter Options")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                filter_gender = st.selectbox("Gender", ["All", "Male", "Female"], key="voice_filter_gender")
-            
-            with col2:
-                # Extract all unique languages from voices
-                all_languages = sorted(set(voice.get("language", "Unknown") for voice in voices))
-                filter_language = st.selectbox("Language", ["All"] + all_languages, key="voice_filter_language")
-            
-            # Filter voices based on selected criteria
-            filtered_voices = page_voices
-            if filter_gender != "All":
-                filtered_voices = [v for v in filtered_voices if v.get("gender", "") == filter_gender]
-            
-            if filter_language != "All":
-                filtered_voices = [v for v in filtered_voices if v.get("language", "") == filter_language]
-            
-            # Show message if no voices match filters
-            if not filtered_voices:
-                st.warning("No voices match your filters. Try different filter options.")
-            
-            # Display each voice with its audio player
-            for voice in filtered_voices:
-                voice_id = voice.get("voice_id", "")
-                voice_name = voice.get("name", "Unnamed")
-                voice_gender = voice.get("gender", "Unspecified")
-                voice_language = voice.get("language", "Unknown")
-                
-                # Get preview URL if available
-                preview_url = ""
-                accent_name = ""
-                accents = voice.get("accents", [])
-                if accents and len(accents) > 0:
-                    preview_url = accents[0].get("preview_url", "")
-                    accent_name = accents[0].get("accent_name", "")
-                
-                # Check if this is the selected voice
-                is_selected = st.session_state.selected_voice == voice_id
-                
-                # Create a card for each voice
-                with st.container():
-                    # Create a card div with conditional selected badge
-                    st.markdown("""
-                    <style>
-                    .selected-badge {
-                        position: absolute;
-                        top: 10px;
-                        right: 10px;
-                        background-color: #28a745;
-                        color: white;
-                        padding: 5px 10px;
-                        border-radius: 5px;
-                        font-weight: bold;
-                    }
-                    </style>
-                    """, unsafe_allow_html=True)
-                    
-                    selected_badge = '<div class="selected-badge">✓ Selected</div>' if is_selected else ''
-                    st.markdown(f'<div class="voice-card">{selected_badge}', unsafe_allow_html=True)
-                    
-                    col1, col2 = st.columns([3, 1])
-                    
-                    with col1:
-                        # Voice name and properties
-                        st.markdown(f"### {voice_name}")
+                for tab_idx, lang in enumerate(sorted_languages):
+                    with tabs[tab_idx]:
+                        lang_voices = voice_by_language[lang]
                         
-                        # Show voice characteristics as bubbles
-                        bubbles = [
-                            f"Gender: {voice_gender}",
-                            f"Language: {voice_language}"
-                        ]
+                        # Pagination settings
+                        voices_per_page = 3  # Show 3 voices per page
+                        total_pages = (len(lang_voices) + voices_per_page - 1) // voices_per_page
                         
-                        if accent_name:
-                            bubbles.append(f"Accent: {accent_name}")
+                        # Start and end indices for current page
+                        current_page = st.session_state.voice_pagination[lang]
+                        start_idx = current_page * voices_per_page
+                        end_idx = min(start_idx + voices_per_page, len(lang_voices))
+                        
+                        # Display current page range info
+                        st.markdown(f"**Showing voices {start_idx+1}-{end_idx} of {len(lang_voices)}**")
+                        
+                        # Display only the voices for the current page
+                        for voice_idx in range(start_idx, end_idx):
+                            voice = lang_voices[voice_idx]
+                            voice_id = voice.get("voice_id")
+                            voice_name = voice.get("name", "Unnamed")
+                            voice_gender = voice.get("gender", "Unspecified")
                             
-                        bubble_html = "<div>"
-                        for bubble in bubbles:
-                            bubble_html += f'<span class="bubble">{bubble}</span> '
-                        bubble_html += "</div>"
-                        
-                        st.markdown(bubble_html, unsafe_allow_html=True)
-                    
-                    with col2:
-                        # Select button
-                        if st.button("Select", key=f"select_voice_{voice_id}", 
-                                   disabled=is_selected,
-                                   help="Click to select this voice"):
-                            st.session_state.selected_voice = voice_id
-                            st.session_state.selected_voice_name = voice_name
-                            st.rerun()
-                    
-                    # Display audio player if we have a preview URL
-                    if preview_url:
-                        st.audio(preview_url, format="audio/mp3")
-                    else:
-                        with st.expander("Generate voice preview"):
-                            preview_text = st.text_input("Enter text for preview", 
-                                                      "Hello, this is a sample of how this voice sounds.", 
-                                                      key=f"preview_text_{voice_id}")
+                            # Get preview URL from the accents list if available
+                            preview_url = ""
+                            accent_name = ""
+                            accents = voice.get("accents", [])
+                            if accents and len(accents) > 0:
+                                preview_url = accents[0].get("preview_url", "")
+                                accent_name = accents[0].get("accent_name", "")
                             
-                            if st.button("Generate Preview", key=f"gen_preview_{voice_id}"):
-                                with st.spinner("Generating voice preview..."):
-                                    preview_url, preview_error = generate_voice_preview(voice_id, preview_text)
+                            # Check if this voice is currently selected
+                            is_selected = st.session_state.selected_voice == voice_id
+                            
+                            # Create a card for each voice
+                            with st.container():
+                                # Voice card with name and properties
+                                title_col, status_col = st.columns([3, 1])
+                                with title_col:
+                                    st.markdown(f"### {voice_name}")
+                                with status_col:
+                                    if is_selected:
+                                        st.markdown("✅ **Selected**")
+                                
+                                # Show voice characteristics as bubbles
+                                bubbles = [
+                                    f"Gender: {voice_gender}",
+                                    f"Language: {lang}"
+                                ]
+                                
+                                if accent_name:
+                                    bubbles.append(f"Accent: {accent_name}")
                                     
-                                    if preview_error:
-                                        st.error(preview_error)
-                                    elif preview_url:
+                                bubble_html = "<div>"
+                                for bubble in bubbles:
+                                    bubble_html += f'<span class="bubble">{bubble}</span> '
+                                bubble_html += "</div>"
+                                
+                                st.markdown(bubble_html, unsafe_allow_html=True)
+                                
+                                # Two column layout: audio player and selection button
+                                col1, col2 = st.columns([2, 1])
+                                
+                                # Display audio player if we have a preview URL
+                                with col1:
+                                    if preview_url:
                                         st.audio(preview_url, format="audio/mp3")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
+                                    else:
+                                        st.info("Voice preview not available")
+                                
+                                # Select button with unique key - with different text if already selected
+                                with col2:
+                                    button_text = "Selected" if is_selected else "Use This Voice"
+                                    button_disabled = is_selected
+                                    
+                                    if st.button(button_text, key=f"select_{lang}_{voice_idx}", disabled=button_disabled):
+                                        # Save both the voice_id and name in session state
+                                        st.session_state.selected_voice = voice_id
+                                        st.session_state.selected_voice_name = voice_name
+                                        st.rerun()  # Refresh to show the updated selection
+                                
+                                # Add separator between voices
+                                st.markdown("---")
+                        
+                        # Pagination navigation
+                        if total_pages > 1:
+                            col1, col2, col3 = st.columns([1, 3, 1])
+                            
+                            with col1:
+                                if current_page > 0:
+                                    if st.button("← Previous", key=f"prev_{lang}"):
+                                        st.session_state.voice_pagination[lang] = current_page - 1
+                                        st.rerun()
+                            
+                            with col2:
+                                # Page selector - dropdown to jump to specific page
+                                page_options = [f"Page {i+1} of {total_pages}" for i in range(total_pages)]
+                                selected_page = st.selectbox(
+                                    "Go to page:", 
+                                    page_options, 
+                                    index=current_page,
+                                    key=f"page_select_{lang}"
+                                )
+                                # Extract page number from selection and update if changed
+                                selected_page_num = int(selected_page.split()[1]) - 1
+                                if selected_page_num != current_page:
+                                    st.session_state.voice_pagination[lang] = selected_page_num
+                                    st.rerun()
+                            
+                            with col3:
+                                if current_page < total_pages - 1:
+                                    if st.button("Next →", key=f"next_{lang}"):
+                                        st.session_state.voice_pagination[lang] = current_page + 1
+                                        st.rerun()
             
-            # Display currently selected voice with clear feedback
+            # Display currently selected voice
             if st.session_state.selected_voice:
-                st.success(f"Selected voice: {st.session_state.selected_voice_name}")
-                st.info(f"Voice ID: {st.session_state.selected_voice}")
+                st.success(f"Currently selected voice: {st.session_state.selected_voice_name} (ID: {st.session_state.selected_voice})")
                 
                 # Voice volume slider
-                st.session_state.voice_volume = st.slider("Voice Volume", 0.0, 1.0, 0.5, 0.1)
+                voice_volume = st.slider("Voice Volume", 0.0, 1.0, 0.5, 0.1)
+                st.session_state.voice_volume = voice_volume
             else:
-                st.warning("No voice selected yet. Please select a voice before creating your video.")
+                st.info("No voice selected yet. Default voice will be used.")
                 st.session_state.voice_volume = 0.5
+
         
         # Create video button
         if st.button("Create Video") and selected_persona and st.session_state.link_data:
@@ -798,3 +801,141 @@ elif st.session_state.step == 4:
                     st.button("View Results", on_click=lambda: st.rerun())
     else:
         st.error("No personas available. Please check your API connection.")
+
+# Step 5: View Results
+elif st.session_state.step == 5:
+    st.header("Video Results")
+    
+    if not st.session_state.video_data:
+        st.error("No video data available. Please go back and create a video.")
+        st.session_state.step = 4
+        st.button("Go Back", on_click=lambda: st.rerun())
+    else:
+        # Get current status
+        video_id = st.session_state.video_data.get("id")
+        video_status, status_error = get_video_status(video_id)
+        
+        if status_error:
+            st.error(status_error)
+        else:
+            # Update session state
+            st.session_state.video_data = video_status
+            
+            # Display status card
+            status = video_status.get("status", "unknown")
+            progress = video_status.get("progress", 0)
+            
+            st.markdown(f"""
+                <div class="card">
+                    <h3>Video Status</h3>
+                    <p><strong>Project:</strong> {st.session_state.project_name}</p>
+                    <p><strong>Status:</strong> {status}</p>
+                    <p><strong>Progress:</strong> {progress*100:.0f}%</p>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            st.progress(progress)
+            
+            # Show characteristics in bubbles
+            st.subheader("Video Characteristics")
+            
+            characteristics = [
+                f"Platform: {video_status.get('target_platform', 'unknown')}",
+                f"Audience: {video_status.get('target_audience', 'unknown')}",
+                f"Length: {video_status.get('video_length', 0)} seconds",
+                f"Aspect Ratio: {video_status.get('aspect_ratio', 'unknown')}",
+                f"Language: {video_status.get('language', 'unknown')}",
+                f"Style: {video_status.get('visual_style', 'unknown')}"
+            ]
+            
+            bubble_html = "<div>"
+            for char in characteristics:
+                bubble_html += f'<div class="bubble">{char}</div> '
+            bubble_html += "</div>"
+            
+            st.markdown(bubble_html, unsafe_allow_html=True)
+            
+            # Check status and show appropriate content
+            if status == "pending" or status == "running":
+                st.info("Your video is being processed. This may take a few minutes.")
+                
+                # Show refresh button
+                if st.button("Refresh Status"):
+                    st.rerun()
+                
+                # Show preview if available
+                preview_url = video_status.get("preview")
+                if preview_url:
+                    st.subheader("Preview")
+                    st.markdown(f"""
+                        <div class="card">
+                            <p>View your video preview:</p>
+                            <a href="{preview_url}" target="_blank" class="stButton">
+                                <button>Open Preview</button>
+                            </a>
+                        </div>
+                    """, unsafe_allow_html=True)
+            
+            elif status == "done":
+                st.success("Your video is ready!")
+                
+                # Display the video
+                video_url = video_status.get("video_output")
+                if video_url:
+                    st.subheader("Your Video")
+                    st.markdown(f"""
+                        <div class="video-container">
+                            <video width="100%" controls>
+                                <source src="{video_url}" type="video/mp4">
+                                Your browser does not support video playback.
+                            </video>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Download button
+                    st.download_button(
+                        label="Download Video",
+                        data=requests.get(video_url).content,
+                        file_name=f"{st.session_state.project_name.replace(' ', '_')}.mp4",
+                        mime="video/mp4"
+                    )
+                    
+                    # Show script for reference
+                    st.subheader("Script")
+                    st.markdown(f"""
+                        <div class="card">
+                            <p>{st.session_state.screenplay_data.get('final_script')}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.warning("Video URL not available. There might be an issue with the video.")
+            
+            elif status == "failed":
+                st.error("Video creation failed.")
+                failed_reason = video_status.get("failed_reason", "Unknown reason")
+                st.write(f"Reason: {failed_reason}")
+                
+                # Option to try again
+                if st.button("Try Again"):
+                    st.session_state.step = 4
+                    st.rerun()
+            
+            # Render button (for pending/running status)
+            if status != "done" and status != "failed":
+                if st.button("Render Final Video"):
+                    with st.spinner("Rendering video..."):
+                        render_result, render_error = render_video(video_id)
+                        
+                        if render_error:
+                            st.error(render_error)
+                        else:
+                            st.session_state.video_data = render_result
+                            st.success("Rendering started!")
+                            st.rerun()
+
+# Footer
+st.markdown("""
+<div style="text-align: center; margin-top: 2rem; padding: 1rem; background-color: #f8f9fa; border-radius: 10px;">
+    <p>Complete AI Video Pipeline: Brief → Screenplay → Images → Video</p>
+</div>
+""", unsafe_allow_html=True)
