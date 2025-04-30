@@ -41,7 +41,7 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
     .header {
-        background-color: #4CAF50;
+        background-color: #2196F3;
         color: white;
         padding: 1rem;
         border-radius: 10px;
@@ -53,7 +53,7 @@ st.markdown("""
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
     .stButton button {
-        background-color: #4CAF50;
+        background-color: #2196F3;
         color: white;
         font-weight: bold;
     }
@@ -104,6 +104,17 @@ def get_personas():
         st.error(f"Error fetching personas: {str(e)}")
         return []
 
+# Function to get available voices
+@st.cache_data(ttl=3600)
+def get_voices():
+    url = "https://api.creatify.ai/api/voices/"
+    try:
+        response = requests.get(url, headers=headers)
+        return response.json()
+    except Exception as e:
+        st.error(f"Error fetching voices: {str(e)}")
+        return []
+
 # Function to generate screenplay using Gemini
 def generate_screenplay(campaign_brief, tone, target_audience, product_details, num_scenes):
     try:
@@ -141,6 +152,7 @@ Keep the total word count under 200 words for the script portion.
         response = client.models.generate_content(
             model="gemini-1.5-pro",
             contents=prompt,
+            generation_config={"temperature": 0.7, "max_output_tokens": 1024}
         )
         
         # Get the response text from the response object
@@ -280,6 +292,7 @@ def create_video(link_id, name, script, avatar_id, **kwargs):
         "visual_style": kwargs.get("style", "GreenScreenEffectTemplate"),
         "override_avatar": avatar_id,
         "override_script": script,
+        "override_voice": kwargs.get("voice_id"),
         "voiceover_volume": kwargs.get("volume", 0.5),
         "link": link_id,
         "no_background_music": kwargs.get("no_music", True),
@@ -363,7 +376,7 @@ with st.sidebar:
         st.session_state.image_urls = []
         st.session_state.link_data = None
         st.session_state.video_data = None
-        st.rerun()
+        st.experimental_rerun()
 
 # Step 1: Enter Campaign Details
 if st.session_state.step == 1:
@@ -396,7 +409,7 @@ if st.session_state.step == 1:
                     st.session_state.screenplay_data = screenplay_data
                     st.session_state.project_name = project_name
                     st.session_state.step = 2
-                    st.rerun()
+                    st.experimental_rerun()
 
 # Step 2: Display Screenplay and Confirm
 elif st.session_state.step == 2:
@@ -423,12 +436,12 @@ elif st.session_state.step == 2:
     # Edit screenplay if needed
     if st.button("Edit Screenplay"):
         st.session_state.step = 1
-        st.rerun()
+        st.experimental_rerun()
     
     # Proceed to image generation
     if st.button("Generate Images from Prompts"):
         st.session_state.step = 3
-        st.rerun()
+        st.experimental_rerun()
 
 # Step 3: Generate and Upload Images
 elif st.session_state.step == 3:
@@ -494,7 +507,7 @@ elif st.session_state.step == 3:
                 st.session_state.step = 4
                 status_text.empty()
                 st.success("All images generated and uploaded! Link created successfully.")
-                st.button("Continue to Video Creation", on_click=lambda: st.rerun())
+                st.button("Continue to Video Creation", on_click=lambda: st.experimental_rerun())
         else:
             st.error("No images were successfully generated and uploaded. Please try again.")
 
@@ -584,7 +597,7 @@ elif st.session_state.step == 4:
                     st.session_state.video_data = video_data
                     st.session_state.step = 5
                     st.success("Video creation initiated!")
-                    st.button("View Results", on_click=lambda: st.rerun())
+                    st.button("View Results", on_click=lambda: st.experimental_rerun())
     else:
         st.error("No personas available. Please check your API connection.")
 
@@ -595,7 +608,7 @@ elif st.session_state.step == 5:
     if not st.session_state.video_data:
         st.error("No video data available. Please go back and create a video.")
         st.session_state.step = 4
-        st.button("Go Back", on_click=lambda: st.rerun())
+        st.button("Go Back", on_click=lambda: st.experimental_rerun())
     else:
         # Get current status
         video_id = st.session_state.video_data.get("id")
@@ -647,7 +660,7 @@ elif st.session_state.step == 5:
                 
                 # Show refresh button
                 if st.button("Refresh Status"):
-                    st.rerun()
+                    st.experimental_rerun()
                 
                 # Show preview if available
                 preview_url = video_status.get("preview")
@@ -704,7 +717,7 @@ elif st.session_state.step == 5:
                 # Option to try again
                 if st.button("Try Again"):
                     st.session_state.step = 4
-                    st.rerun()
+                    st.experimental_rerun()
             
             # Render button (for pending/running status)
             if status != "done" and status != "failed":
@@ -717,7 +730,7 @@ elif st.session_state.step == 5:
                         else:
                             st.session_state.video_data = render_result
                             st.success("Rendering started!")
-                            st.rerun()
+                            st.experimental_rerun()
 
 # Footer
 st.markdown("""
