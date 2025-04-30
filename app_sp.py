@@ -1,3 +1,4 @@
+from imagekitio import ImageKit
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -12,7 +13,6 @@ from PIL import Image
 from io import BytesIO
 import base64
 import uuid
-# from imagekitio import ImageKit
 import requests
 import json
 
