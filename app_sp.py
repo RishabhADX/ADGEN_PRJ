@@ -391,8 +391,7 @@ def run_screenplay_crew(campaign_summary):
             ],
             "final_script": "You're not alone... Financial stress is affecting so many. Real help for real debt. Professional, confidential support awaits. Take the first step... Start your free debt review today."
         }
-
-.placeholder.com/512x512" for _ in range(len(image_prompts))]
+ for _ in range(len(image_prompts)):
     
     # Initialize the gemini client
     try:
