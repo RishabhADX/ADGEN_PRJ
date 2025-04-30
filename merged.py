@@ -93,12 +93,12 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# Initialize Gemini client
-try:
-    genai.configure(api_key=GEMINI_API_KEY)
-    client = genai.GenerativeModel("gemini-1.5-pro")
-except Exception as e:
-    st.error(f"Failed to initialize Gemini: {str(e)}")
+# # Initialize Gemini client
+# try:
+#     genai.configure(api_key=GEMINI_API_KEY)
+#     client = genai.GenerativeModel("gemini-1.5-pro")
+# except Exception as e:
+#     st.error(f"Failed to initialize Gemini: {str(e)}")
 
 # Function to get available personas
 @st.cache_data(ttl=3600)
