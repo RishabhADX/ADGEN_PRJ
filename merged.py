@@ -609,16 +609,13 @@ elif st.session_state.step == 4:
 
         # Complete fixed voice selection section with proper ID handling
 
-        # FIXED Voice Selection Section with Pagination
+        # Completely redesigned voice selection using radio buttons
+
+        # FIXED Voice Selection Section with Radio Buttons
         st.subheader("Select Voice")
         
         # Get voices with their preview URLs
         voices = get_voices()
-        
-        # Check if we already have a selected voice in session state
-        if 'selected_voice' not in st.session_state:
-            st.session_state.selected_voice = ""
-            st.session_state.selected_voice_name = ""
         
         # Initialize pagination state for each language if not already present
         if 'voice_pagination' not in st.session_state:
@@ -648,9 +645,24 @@ elif st.session_state.step == 4:
             if sorted_languages:
                 tabs = st.tabs(sorted_languages)
                 
+                # Prepare a list of all voice options for radio selection
+                all_voice_options = {}
+                
                 for tab_idx, lang in enumerate(sorted_languages):
                     with tabs[tab_idx]:
                         lang_voices = voice_by_language[lang]
+                        
+                        # Create a list of voice options for this language
+                        voice_options = {}
+                        for voice in lang_voices:
+                            voice_id = voice.get("voice_id", "")
+                            voice_name = voice.get("name", "Unnamed")
+                            if voice_id:
+                                # Store as ID: Name pairs
+                                voice_options[voice_id] = voice_name
+                        
+                        # Add to the global voice options
+                        all_voice_options.update(voice_options)
                         
                         # Pagination settings
                         voices_per_page = 3  # Show 3 voices per page
@@ -664,7 +676,43 @@ elif st.session_state.step == 4:
                         # Display current page range info
                         st.markdown(f"**Showing voices {start_idx+1}-{end_idx} of {len(lang_voices)}**")
                         
-                        # Display only the voices for the current page
+                        # Radio button for voice selection
+                        voice_ids = [voice.get("voice_id", "") for voice in lang_voices[start_idx:end_idx]]
+                        voice_names = [voice.get("name", "Unnamed") for voice in lang_voices[start_idx:end_idx]]
+                        
+                        # Create radio options dict with ID: Name
+                        radio_options = {voice_id: f"{name}" for voice_id, name in zip(voice_ids, voice_names) if voice_id}
+                        
+                        # Use an empty string as the default if no voice is selected
+                        if 'selected_voice' not in st.session_state:
+                            st.session_state.selected_voice = ""
+                            
+                        # Convert to list of labels for the radio buttons
+                        radio_labels = list(radio_options.values())
+                        radio_ids = list(radio_options.keys())
+                        
+                        # Find the index of the selected voice in the current page options, default to 0 if not found
+                        selected_index = 0
+                        if st.session_state.selected_voice in radio_ids:
+                            selected_index = radio_ids.index(st.session_state.selected_voice)
+                        
+                        # Create the radio button
+                        selected_voice_name = st.radio(
+                            "Select a voice:",
+                            radio_labels,
+                            index=selected_index,
+                            key=f"voice_select_{lang}_{current_page}"
+                        )
+                        
+                        # Update the selected voice ID based on the selection
+                        if selected_voice_name:
+                            # Find the voice ID that corresponds to the selected name
+                            for voice_id, name in radio_options.items():
+                                if name == selected_voice_name:
+                                    st.session_state.selected_voice = voice_id
+                                    st.session_state.selected_voice_name = selected_voice_name
+                        
+                        # Display the voices with audio players
                         for voice_idx in range(start_idx, end_idx):
                             voice = lang_voices[voice_idx]
                             voice_id = voice.get("voice_id", "")
@@ -679,18 +727,16 @@ elif st.session_state.step == 4:
                                 preview_url = accents[0].get("preview_url", "")
                                 accent_name = accents[0].get("accent_name", "")
                             
-                            # Fix: Use a consistent format for comparison - ensure both are strings and trim whitespace
-                            current_voice_id = str(voice_id).strip() if voice_id else ""
-                            selected_voice_id = str(st.session_state.selected_voice).strip() if st.session_state.selected_voice else ""
-                            is_selected = current_voice_id and selected_voice_id and current_voice_id == selected_voice_id
+                            # Check if this is the currently selected voice
+                            is_selected = st.session_state.selected_voice == voice_id
                             
                             # Create a card for each voice
                             with st.container():
                                 # Voice card with name and properties
-                                title_col, status_col = st.columns([3, 1])
-                                with title_col:
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
                                     st.markdown(f"### {voice_name}")
-                                with status_col:
+                                with col2:
                                     if is_selected:
                                         st.markdown("✅ **Selected**")
                                 
@@ -710,26 +756,11 @@ elif st.session_state.step == 4:
                                 
                                 st.markdown(bubble_html, unsafe_allow_html=True)
                                 
-                                # Two column layout: audio player and selection button
-                                col1, col2 = st.columns([2, 1])
-                                
                                 # Display audio player if we have a preview URL
-                                with col1:
-                                    if preview_url:
-                                        st.audio(preview_url, format="audio/mp3")
-                                    else:
-                                        st.info("Voice preview not available")
-                                
-                                # Select button with unique key - with different text if already selected
-                                with col2:
-                                    button_text = "Selected" if is_selected else "Use This Voice"
-                                    button_disabled = is_selected
-                                    
-                                    # Store the voice ID directly in the button handler 
-                                    if st.button(button_text, key=f"select_{lang}_{voice_idx}", disabled=button_disabled):
-                                        st.session_state.selected_voice = current_voice_id
-                                        st.session_state.selected_voice_name = voice_name
-                                        st.rerun()  # Refresh to show the updated selection
+                                if preview_url:
+                                    st.audio(preview_url, format="audio/mp3")
+                                else:
+                                    st.info("Voice preview not available")
                                 
                                 # Add separator between voices
                                 st.markdown("---")
@@ -765,14 +796,20 @@ elif st.session_state.step == 4:
                                         st.session_state.voice_pagination[lang] = current_page + 1
                                         st.rerun()
             
-            # Display currently selected voice with ID for debugging
+            # Display currently selected voice with clearer indication
             if st.session_state.selected_voice:
-                st.success(f"Currently selected voice: {st.session_state.selected_voice_name}")
+                # Find the full name from our options
+                selected_name = st.session_state.selected_voice_name
+                selected_id = st.session_state.selected_voice
+                
+                st.success(f"Selected voice: {selected_name}")
+                st.info(f"Voice ID: {selected_id} (This ID will be used for video creation)")
+                
+                # Voice volume slider
                 st.session_state.voice_volume = st.slider("Voice Volume", 0.0, 1.0, 0.5, 0.1)
             else:
-                st.info("No voice selected yet. Default voice will be used.")
+                st.warning("No voice selected yet. Please select a voice before creating your video.")
                 st.session_state.voice_volume = 0.5
-
         
         # Create video button
         if st.button("Create Video") and selected_persona and st.session_state.link_data:
