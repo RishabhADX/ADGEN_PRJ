@@ -6,12 +6,14 @@ from PIL import Image
 from io import BytesIO
 import uuid
 import time
+import io
+import re
 from google import genai
 from google.genai import types
 
 # Page configuration
 st.set_page_config(
-    page_title="Creatify AI Video Generator",
+    page_title="AI Video Generator Pipeline",
     page_icon="🎬",
     layout="wide",
 )
@@ -55,6 +57,17 @@ st.markdown("""
         color: white;
         font-weight: bold;
     }
+    .screenplay {
+        font-family: 'Courier New', monospace;
+        background-color: #f9f9f9;
+        padding: 20px;
+        border-radius: 5px;
+        white-space: pre-wrap;
+    }
+    .scene-heading {
+        font-weight: bold;
+        text-transform: uppercase;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -66,18 +79,18 @@ IMAGEKIT_PRIVATE_KEY = "private_OGgux+C54n9PIYDlLdOrYysEWrw="
 IMAGEKIT_PUBLIC_KEY = "public_Qq9s197rBPKyx5eWhq+aN6TQ3Iw="
 IMAGEKIT_URL_ENDPOINT = "https://ik.imagekit.io/b6pq3mgo7"
 
-# Initialize Gemini
-try:
-    client = genai.Client(api_key=GEMINI_API_KEY)
-except Exception as e:
-    st.error(f"Failed to initialize Gemini: {str(e)}")
-
 # Headers for API requests
 headers = {
     "X-API-ID": API_ID,
     "X-API-KEY": API_KEY,
     "Content-Type": "application/json"
 }
+
+# Initialize Gemini client
+try:
+    client = genai.Client(api_key=GEMINI_API_KEY)
+except Exception as e:
+    st.error(f"Failed to initialize Gemini: {str(e)}")
 
 # Function to get available personas
 @st.cache_data(ttl=3600)
@@ -90,6 +103,85 @@ def get_personas():
     except Exception as e:
         st.error(f"Error fetching personas: {str(e)}")
         return []
+
+# Function to generate screenplay using Gemini
+def generate_screenplay(campaign_brief, tone, target_audience, product_details, num_scenes):
+    try:
+        prompt = f"""Generate a captivating screenplay-style ad creative for the following brief:
+
+Campaign Brief: {campaign_brief}
+Tone: {tone}
+Target Audience: {target_audience}
+Product/Service Details: {product_details}
+Number of Scenes: {num_scenes} (keep it concise)
+
+Create the screenplay in proper format with:
+1. SCENE HEADINGS in all caps
+2. Action descriptions in present tense
+3. Minimal dialogue (if needed)
+4. Clear visual storytelling
+
+The structure should include:
+- A HOOK scene that grabs attention
+- BODY scenes that develop the message
+- A CTA (call-to-action) scene
+
+Additionally, FOR EACH SCENE, create one detailed image prompt that could be used for AI image generation.
+Format your response as a JSON object with these fields:
+- title: A descriptive ad title
+- style: "screenplay"
+- screenplay: The full formatted screenplay content
+- image_prompts: An array with one detailed image prompt per scene
+- final_script: The complete voiceover content/narration text for the ad
+
+Keep the total word count under 200 words for the script portion.
+"""
+
+        response = client.generate_text(
+            model="models/gemini-1.5-pro",
+            prompt=prompt,
+            temperature=0.7,
+            max_output_tokens=1024
+        )
+        
+        try:
+            # Try to parse as JSON
+            screenplay_data = json.loads(response.text)
+            return screenplay_data, None
+        except json.JSONDecodeError:
+            # If not valid JSON, extract useful info using regex
+            title_match = re.search(r'"title":\s*"([^"]+)"', response.text)
+            title = title_match.group(1) if title_match else "Untitled Screenplay"
+            
+            screenplay_match = re.search(r'"screenplay":\s*"([^"]*)"', response.text, re.DOTALL)
+            screenplay = screenplay_match.group(1) if screenplay_match else response.text
+            
+            # Extract image prompts using regex
+            image_prompts_text = re.search(r'"image_prompts":\s*\[(.*?)\]', response.text, re.DOTALL)
+            if image_prompts_text:
+                # Clean up and split the prompts
+                prompts_text = image_prompts_text.group(1)
+                # Split by commas that are followed by a quote
+                image_prompts = re.findall(r'"(.*?)"', prompts_text)
+            else:
+                # Fallback: Try to find lines that look like image prompts
+                image_prompts = re.findall(r'Image prompt.*?:\s*(.*?)(?:\n|$)', response.text)
+            
+            script_match = re.search(r'"final_script":\s*"([^"]*)"', response.text, re.DOTALL)
+            final_script = script_match.group(1) if script_match else ""
+            
+            # Construct JSON-like structure
+            screenplay_data = {
+                "title": title,
+                "style": "screenplay",
+                "screenplay": screenplay.replace('\\n', '\n').replace('\\"', '"'),
+                "image_prompts": image_prompts[:num_scenes],  # Limit to requested number of scenes
+                "final_script": final_script.replace('\\n', '\n').replace('\\"', '"')
+            }
+            
+            return screenplay_data, None
+    except Exception as e:
+        return None, str(e)
 
 # Function to generate image with Gemini
 def generate_image(prompt):
@@ -116,29 +208,40 @@ def generate_image(prompt):
 # Function to upload image to ImageKit
 def upload_to_imagekit(image_data, filename):
     try:
-        import requests
+        # Convert image to bytes if it's not already
+        if isinstance(image_data, Image.Image):
+            buffer = io.BytesIO()
+            image_data.save(buffer, format="PNG")
+            image_bytes = buffer.getvalue()
+        else:
+            image_bytes = image_data
+            
+        # Create a file-like object
+        file_like = io.BytesIO(image_bytes)
         
-        # Prepare the request
-        url = f"{IMAGEKIT_URL_ENDPOINT}/api/v1/files/upload"
-        auth_string = base64.b64encode(f"{IMAGEKIT_PRIVATE_KEY}:".encode()).decode()
+        # Prepare the upload
+        url = f"https://upload.imagekit.io/api/v1/files/upload"
         
-        headers = {
-            "Authorization": f"Basic {auth_string}",
-            "Content-Type": "multipart/form-data"
+        # Create authentication header
+        auth_str = base64.b64encode(f"{IMAGEKIT_PRIVATE_KEY}:".encode()).decode()
+        
+        headers_upload = {
+            "Authorization": f"Basic {auth_str}"
         }
         
         files = {
-            "file": (filename, image_data),
-            "fileName": (None, filename)
+            'file': (filename, file_like, 'image/png'),
+            'fileName': (None, filename),
+            'publicKey': (None, IMAGEKIT_PUBLIC_KEY),
         }
         
-        response = requests.post(url, files=files, headers=headers)
+        response = requests.post(url, files=files, headers=headers_upload)
         
         if response.status_code == 200:
-            data = response.json()
-            return data.get("url"), data.get("fileId"), None
+            result = response.json()
+            return result.get("url"), result.get("fileId"), None
         else:
-            return None, None, f"Upload failed: {response.text}"
+            return None, None, f"Upload failed with status {response.status_code}: {response.text}"
             
     except Exception as e:
         return None, None, str(e)
@@ -152,15 +255,14 @@ def create_creatify_link(image_urls, title, description):
         "description": description,
         "image_urls": image_urls,
         "video_urls": [],
-        "reviews": "Generated with Creatify AI"
+        "reviews": "Generated with AI Video Pipeline"
     }
     
     try:
         response = requests.post(url, json=payload, headers=headers)
-        return response.json()
+        return response.json(), None
     except Exception as e:
-        st.error(f"Error creating link: {str(e)}")
-        return None
+        return None, f"Error creating link: {str(e)}"
 
 # Function to create video
 def create_video(link_id, name, script, avatar_id, **kwargs):
@@ -184,10 +286,9 @@ def create_video(link_id, name, script, avatar_id, **kwargs):
     
     try:
         response = requests.post(url, json=payload, headers=headers)
-        return response.json()
+        return response.json(), None
     except Exception as e:
-        st.error(f"Error creating video: {str(e)}")
-        return None
+        return None, f"Error creating video: {str(e)}"
 
 # Function to get video status
 def get_video_status(video_id):
@@ -195,10 +296,9 @@ def get_video_status(video_id):
     
     try:
         response = requests.get(url, headers=headers)
-        return response.json()
+        return response.json(), None
     except Exception as e:
-        st.error(f"Error getting video status: {str(e)}")
-        return None
+        return None, f"Error getting video status: {str(e)}"
 
 # Function to render video
 def render_video(video_id):
@@ -206,127 +306,206 @@ def render_video(video_id):
     
     try:
         response = requests.post(url, headers=headers)
-        return response.json()
+        return response.json(), None
     except Exception as e:
-        st.error(f"Error rendering video: {str(e)}")
-        return None
+        return None, f"Error rendering video: {str(e)}"
+
+# Function to format screenplay for display
+def format_screenplay_display(screenplay_text):
+    # Replace scene headings with styled versions
+    formatted = re.sub(r'(INT\.|EXT\.)(.*?)(?=\n)', r'<div class="scene-heading">\1\2</div>', screenplay_text)
+    # Replace double line breaks with paragraph breaks
+    formatted = formatted.replace('\n\n', '</p><p>')
+    return f'<p>{formatted}</p>'
 
 # Display header
-st.markdown('<div class="header"><h1>🎬 Creatify AI Video Generator</h1></div>', unsafe_allow_html=True)
+st.markdown('<div class="header"><h1>🎬 AI Video Pipeline: From Brief to Video</h1></div>', unsafe_allow_html=True)
 
-# Sidebar for configuration
+# Initialize session state for storing data between steps
+if 'step' not in st.session_state:
+    st.session_state.step = 1
+if 'screenplay_data' not in st.session_state:
+    st.session_state.screenplay_data = None
+if 'image_urls' not in st.session_state:
+    st.session_state.image_urls = []
+if 'link_data' not in st.session_state:
+    st.session_state.link_data = None
+if 'video_data' not in st.session_state:
+    st.session_state.video_data = None
+
+# Sidebar for navigation and status
 with st.sidebar:
-    st.header("Configuration")
+    st.header("Workflow")
     
-    # Project details
-    st.subheader("Project Details")
-    project_name = st.text_input("Project Name", "My Awesome Video")
+    # Show workflow steps
+    steps = [
+        "1. Enter Campaign Details",
+        "2. Generate Screenplay",
+        "3. Generate & Upload Images",
+        "4. Create Video",
+        "5. View Results"
+    ]
     
-    # Script input
-    st.subheader("Script")
-    script = st.text_area("Enter your script", "You're not alone... Financial stress is affecting so many. Real help for real debt. Professional, confidential support awaits. Take the first step... Start your free debt review today.")
+    for i, step in enumerate(steps):
+        if i + 1 < st.session_state.step:
+            st.success(step)
+        elif i + 1 == st.session_state.step:
+            st.info(step + " (Current)")
+        else:
+            st.write(step)
     
-    # Video settings
-    st.subheader("Video Settings")
-    platform = st.selectbox("Target Platform", ["Facebook", "Instagram", "YouTube", "TikTok", "LinkedIn"])
-    audience = st.text_input("Target Audience", "Debt Payers")
-    language = st.selectbox("Language", ["en", "es", "fr", "de"])
-    video_length = st.slider("Video Length (seconds)", 15, 60, 30)
-    aspect_ratio = st.selectbox("Aspect Ratio", ["16x9", "1x1", "9x16"])
-    
-    # Image prompts
-    st.subheader("Image Prompts")
-    image_prompts = []
-    
-    num_scenes = st.number_input("Number of Scenes", 1, 5, 3, step=1)
-    
-    for i in range(num_scenes):
-        prompt = st.text_area(f"Scene {i+1} Prompt", 
-                              f"Professional financial advisor with sympathetic expression in a modern office, warm lighting, supportive environment, scene {i+1}", 
-                              key=f"prompt_{i}")
-        image_prompts.append(prompt)
+    # Reset button
+    if st.button("Start Over"):
+        st.session_state.step = 1
+        st.session_state.screenplay_data = None
+        st.session_state.image_urls = []
+        st.session_state.link_data = None
+        st.session_state.video_data = None
+        st.experimental_rerun()
 
-# Main content
-tab1, tab2, tab3 = st.tabs(["Generate Images", "Create Video", "Preview & Results"])
-
-with tab1:
-    st.header("Generate Scene Images")
+# Step 1: Enter Campaign Details
+if st.session_state.step == 1:
+    st.header("Enter Campaign Details")
     
-    if st.button("Generate Images"):
+    with st.form("campaign_form"):
+        project_name = st.text_input("Project Name", "My AI Video")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            campaign_brief = st.text_area("Campaign Brief", "A financial service helping people manage and reduce their debt through personalized plans and expert guidance.")
+            tone = st.selectbox("Tone", ["Professional", "Emotional", "Humorous", "Serious", "Inspirational", "Conversational"])
+        
+        with col2:
+            target_audience = st.text_area("Target Audience", "Adults 30-55 who are struggling with debt and seeking reliable solutions to regain financial stability.")
+            product_details = st.text_area("Product/Service Details", "Debt resolution services with personalized plans, expert financial advisors, and a track record of helping clients reduce debt by an average of 30%.")
+        
+        num_scenes = st.slider("Number of Scenes", 2, 5, 3)
+        
+        submitted = st.form_submit_button("Generate Screenplay")
+        
+        if submitted:
+            with st.spinner("Generating screenplay..."):
+                screenplay_data, error = generate_screenplay(
+                    campaign_brief, tone, target_audience, product_details, num_scenes
+                )
+                if error:
+                    st.error(f"Error generating screenplay: {error}")
+                else:
+                    st.session_state.screenplay_data = screenplay_data
+                    st.session_state.project_name = project_name
+                    st.session_state.step = 2
+                    st.experimental_rerun()
+
+# Step 2: Display Screenplay and Confirm
+elif st.session_state.step == 2:
+    st.header("Review Generated Screenplay")
+    
+    screenplay_data = st.session_state.screenplay_data
+    
+    # Display the title
+    st.subheader(screenplay_data["title"])
+    
+    # Display tabs for different views
+    tab1, tab2, tab3 = st.tabs(["Screenplay", "Final Script", "Image Prompts"])
+    
+    with tab1:
+        st.markdown(f'<div class="screenplay">{screenplay_data["screenplay"]}</div>', unsafe_allow_html=True)
+    
+    with tab2:
+        st.markdown(f'<div class="card">{screenplay_data["final_script"]}</div>', unsafe_allow_html=True)
+    
+    with tab3:
+        for i, prompt in enumerate(screenplay_data["image_prompts"]):
+            st.markdown(f'<div class="card"><h4>Scene {i+1}</h4>{prompt}</div>', unsafe_allow_html=True)
+    
+    # Edit screenplay if needed
+    if st.button("Edit Screenplay"):
+        st.session_state.step = 1
+        st.experimental_rerun()
+    
+    # Proceed to image generation
+    if st.button("Generate Images from Prompts"):
+        st.session_state.step = 3
+        st.experimental_rerun()
+
+# Step 3: Generate and Upload Images
+elif st.session_state.step == 3:
+    st.header("Generate & Upload Images")
+    
+    screenplay_data = st.session_state.screenplay_data
+    image_prompts = screenplay_data["image_prompts"]
+    
+    with st.spinner("Generating and uploading images..."):
         progress_bar = st.progress(0)
         status_text = st.empty()
         
         image_urls = []
         image_file_ids = []
-        col1, col2, col3 = st.columns(3)
-        columns = [col1, col2, col3]
+        
+        cols = st.columns(min(len(image_prompts), 3))
         
         for i, prompt in enumerate(image_prompts):
-            if i < len(columns):
-                with columns[i]:
-                    status_text.text(f"Generating image {i+1}/{len(image_prompts)}...")
-                    
-                    # Generate image with Gemini
-                    image_data, error = generate_image(prompt)
-                    
-                    if error:
-                        st.error(f"Error generating image: {error}")
-                        continue
-                    
-                    # Create a filename
-                    filename = f"scene-{i+1:02d}-gemini-image.png"
-                    
-                    # Display the image
-                    image = Image.open(BytesIO(image_data))
-                    st.image(image, caption=f"Scene {i+1}", use_column_width=True)
-                    
-                    # Upload to ImageKit
-                    status_text.text(f"Uploading image {i+1} to ImageKit...")
-                    
-                    # Convert the PIL Image back to bytes for upload
-                    buffered = BytesIO()
-                    image.save(buffered, format="PNG")
-                    img_bytes = buffered.getvalue()
-                    
-                    url, file_id, upload_error = upload_to_imagekit(img_bytes, filename)
-                    
-                    if upload_error:
-                        st.error(f"Error uploading to ImageKit: {upload_error}")
-                    else:
-                        image_urls.append(url)
-                        image_file_ids.append(file_id)
-                        st.success(f"Image {i+1} uploaded successfully!")
-                        
-            progress_bar.progress((i + 1) / len(image_prompts))
+            status_text.text(f"Processing scene {i+1}/{len(image_prompts)}: Generating image...")
             
-        status_text.text("All images generated and uploaded!")
-        
-        # Store the image URLs in the session state
-        st.session_state.image_urls = image_urls
-        st.session_state.image_file_ids = image_file_ids
+            # Generate image
+            image_data, error = generate_image(prompt)
+            
+            if error:
+                st.error(f"Error generating image for scene {i+1}: {error}")
+                continue
+            
+            # Display image
+            with cols[i % len(cols)]:
+                image = Image.open(BytesIO(image_data))
+                st.image(image, caption=f"Scene {i+1}", use_column_width=True)
+                
+                # Upload to ImageKit
+                status_text.text(f"Processing scene {i+1}/{len(image_prompts)}: Uploading to ImageKit...")
+                filename = f"scene-{i+1:02d}-{st.session_state.project_name.replace(' ', '-')}.png"
+                
+                url, file_id, upload_error = upload_to_imagekit(image_data, filename)
+                
+                if upload_error:
+                    st.error(f"Error uploading image {i+1}: {upload_error}")
+                else:
+                    image_urls.append(url)
+                    image_file_ids.append(file_id)
+                    st.success(f"Image {i+1} uploaded!")
+            
+            progress_bar.progress((i + 1) / len(image_prompts))
         
         # Create Creatify link
         if image_urls:
-            status_text.text("Creating Creatify link...")
-            link_data = create_creatify_link(
-                image_urls, 
-                f"{project_name} - Generated Images", 
-                "Images generated with Google Gemini for video creation"
+            status_text.text("Creating Creatify link with uploaded images...")
+            
+            link_data, link_error = create_creatify_link(
+                image_urls,
+                st.session_state.project_name,
+                f"Images for {st.session_state.project_name}"
             )
             
-            if link_data and 'id' in link_data:
-                st.session_state.link_id = link_data['id']
-                st.success(f"Creatify link created successfully! ID: {link_data['id']}")
-                
-                if 'url' in link_data:
-                    st.markdown(f"[View Images Collection]({link_data['url']})")
+            if link_error:
+                st.error(link_error)
             else:
-                st.error("Failed to create Creatify link")
-                
-        status_text.empty()
+                st.session_state.image_urls = image_urls
+                st.session_state.link_data = link_data
+                st.session_state.step = 4
+                status_text.empty()
+                st.success("All images generated and uploaded! Link created successfully.")
+                st.button("Continue to Video Creation", on_click=lambda: st.experimental_rerun())
+        else:
+            st.error("No images were successfully generated and uploaded. Please try again.")
 
-with tab2:
+# Step 4: Create Video
+elif st.session_state.step == 4:
     st.header("Create Video")
+    
+    # Display images that will be used
+    st.subheader("Images for Your Video")
+    cols = st.columns(min(len(st.session_state.image_urls), 3))
+    for i, url in enumerate(st.session_state.image_urls):
+        with cols[i % len(cols)]:
+            st.image(url, caption=f"Scene {i+1}", use_column_width=True)
     
     # Get available personas
     personas = get_personas()
@@ -334,151 +513,27 @@ with tab2:
     if personas:
         st.subheader("Select Avatar")
         
-        # Arrange personas in a grid
-        cols = st.columns(3)
-        persona_options = {}
+        # Display personas in a grid
+        persona_cols = st.columns(3)
+        selected_persona = None
         
-        for i, persona in enumerate(personas[:6]):  # Limit to 6 personas for the demo
-            with cols[i % 3]:
+        for i, persona in enumerate(personas[:6]):  # Limit to first 6 personas
+            with persona_cols[i % 3]:
+                persona_id = persona.get("id")
                 preview_img = persona.get("preview_image_1_1")
+                
                 if preview_img:
                     st.image(preview_img, width=150)
-                    
-                persona_id = persona.get("id")
+                
+                # Show persona characteristics as bubbles
                 gender = persona.get("gender", "unknown")
                 age = persona.get("age_range", "adult")
-                
-                label = f"{gender.upper()} - {age}"
-                st.markdown(f"<div class='bubble'>{label}</div>", unsafe_allow_html=True)
-                
-                select = st.checkbox("Select", key=f"persona_{i}")
-                if select:
-                    persona_options[persona_id] = True
-                else:
-                    persona_options[persona_id] = False
-        
-        # Get the selected persona ID
-        selected_persona_id = None
-        for persona_id, selected in persona_options.items():
-            if selected:
-                selected_persona_id = persona_id
-                break
-                
-        if not selected_persona_id and personas:
-            selected_persona_id = personas[0].get("id")  # Default to the first persona
-        
-        # Create video button
-        if st.button("Create Video") and hasattr(st.session_state, 'link_id') and selected_persona_id:
-            video_data = create_video(
-                st.session_state.link_id,
-                project_name,
-                script,
-                selected_persona_id,
-                platform=platform,
-                audience=audience,
-                language=language,
-                length=video_length,
-                ratio=aspect_ratio
-            )
-            
-            if video_data and 'id' in video_data:
-                st.session_state.video_id = video_data['id']
-                st.success(f"Video creation initiated! Video ID: {video_data['id']}")
-                
-                # Show the initial status
-                video_status = get_video_status(video_data['id'])
-                if video_status:
-                    st.session_state.video_status = video_status
-                    status = video_status.get('status', 'unknown')
-                    progress = video_status.get('progress', 0)
-                    
-                    st.write(f"Status: {status}")
-                    st.progress(progress)
-            else:
-                st.error("Failed to create video")
-    else:
-        st.warning("No personas available. Please check your API connection.")
-
-with tab3:
-    st.header("Preview & Results")
-    
-    if hasattr(st.session_state, 'video_id'):
-        # Get current status
-        if st.button("Check Status"):
-            video_status = get_video_status(st.session_state.video_id)
-            if video_status:
-                st.session_state.video_status = video_status
-        
-        if hasattr(st.session_state, 'video_status'):
-            status = st.session_state.video_status.get('status', 'unknown')
-            progress = st.session_state.video_status.get('progress', 0)
-            
-            # Display status card
-            st.markdown(f"""
-                <div class="card">
-                    <h3>Video Status</h3>
-                    <p><strong>Project:</strong> {project_name}</p>
-                    <p><strong>Status:</strong> {status}</p>
-                    <p><strong>Progress:</strong> {progress * 100:.0f}%</p>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            st.progress(progress)
-            
-            # Preview if available
-            preview_url = st.session_state.video_status.get('preview')
-            if preview_url:
-                st.markdown(f"""
-                    <div class="card">
-                        <h3>Video Preview</h3>
-                        <p>Your video is being processed. You can preview it here:</p>
-                        <a href="{preview_url}" target="_blank">Open Preview</a>
-                    </div>
-                """, unsafe_allow_html=True)
-            
-            # Final video if available
-            video_url = st.session_state.video_status.get('video_output')
-            if video_url:
-                st.markdown(f"""
-                    <div class="card">
-                        <h3>Final Video</h3>
-                        <div class="video-container">
-                            <video width="100%" controls>
-                                <source src="{video_url}" type="video/mp4">
-                                Your browser does not support the video tag.
-                            </video>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                # Download button
-                st.download_button(
-                    label="Download Video",
-                    data=requests.get(video_url).content,
-                    file_name=f"{project_name.replace(' ', '_')}.mp4",
-                    mime="video/mp4"
-                )
-            
-            # Render button (if not done yet)
-            if status != "done" and status != "failed":
-                if st.button("Render Final Video"):
-                    render_result = render_video(st.session_state.video_id)
-                    if render_result:
-                        st.session_state.video_status = render_result
-                        st.success("Rendering started!")
-            
-            # Video characteristics
-            if status == "done":
-                # Show characteristics in bubbles
-                st.markdown("<h3>Video Characteristics</h3>", unsafe_allow_html=True)
+                style = persona.get("style", "professional")
                 
                 characteristics = [
-                    f"Platform: {st.session_state.video_status.get('target_platform', 'unknown')}",
-                    f"Audience: {st.session_state.video_status.get('target_audience', 'unknown')}",
-                    f"Length: {st.session_state.video_status.get('video_length', 0)} seconds",
-                    f"Aspect Ratio: {st.session_state.video_status.get('aspect_ratio', 'unknown')}",
-                    f"Language: {st.session_state.video_status.get('language', 'unknown')}",
-                    f"Style: {st.session_state.video_status.get('visual_style', 'unknown')}"
+                    f"Gender: {gender}",
+                    f"Age: {age}",
+                    f"Style: {style}"
                 ]
                 
                 bubble_html = "<div>"
@@ -488,21 +543,183 @@ with tab3:
                 
                 st.markdown(bubble_html, unsafe_allow_html=True)
                 
-                # Script display
-                script_text = st.session_state.video_status.get('override_script', '')
-                if script_text:
+                # Selection radio button
+                if st.radio("Select", ["No", "Yes"], key=f"persona_{i}") == "Yes":
+                    selected_persona = persona_id
+        
+        # Video settings
+        st.subheader("Video Settings")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            platform = st.selectbox("Target Platform", ["Facebook", "Instagram", "YouTube", "TikTok", "LinkedIn"])
+            language = st.selectbox("Language", ["en", "es", "fr", "de"])
+        
+        with col2:
+            video_length = st.slider("Video Length (seconds)", 15, 60, 30)
+            aspect_ratio = st.selectbox("Aspect Ratio", ["16x9", "1x1", "9x16"])
+        
+        # Create video button
+        if st.button("Create Video") and selected_persona and st.session_state.link_data:
+            with st.spinner("Creating video..."):
+                link_id = st.session_state.link_data.get("id")
+                script = st.session_state.screenplay_data.get("final_script")
+                
+                video_data, video_error = create_video(
+                    link_id,
+                    st.session_state.project_name,
+                    script,
+                    selected_persona,
+                    platform=platform,
+                    language=language,
+                    length=video_length,
+                    ratio=aspect_ratio
+                )
+                
+                if video_error:
+                    st.error(video_error)
+                else:
+                    st.session_state.video_data = video_data
+                    st.session_state.step = 5
+                    st.success("Video creation initiated!")
+                    st.button("View Results", on_click=lambda: st.experimental_rerun())
+    else:
+        st.error("No personas available. Please check your API connection.")
+
+# Step 5: View Results
+elif st.session_state.step == 5:
+    st.header("Video Results")
+    
+    if not st.session_state.video_data:
+        st.error("No video data available. Please go back and create a video.")
+        st.session_state.step = 4
+        st.button("Go Back", on_click=lambda: st.experimental_rerun())
+    else:
+        # Get current status
+        video_id = st.session_state.video_data.get("id")
+        video_status, status_error = get_video_status(video_id)
+        
+        if status_error:
+            st.error(status_error)
+        else:
+            # Update session state
+            st.session_state.video_data = video_status
+            
+            # Display status card
+            status = video_status.get("status", "unknown")
+            progress = video_status.get("progress", 0)
+            
+            st.markdown(f"""
+                <div class="card">
+                    <h3>Video Status</h3>
+                    <p><strong>Project:</strong> {st.session_state.project_name}</p>
+                    <p><strong>Status:</strong> {status}</p>
+                    <p><strong>Progress:</strong> {progress*100:.0f}%</p>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            st.progress(progress)
+            
+            # Show characteristics in bubbles
+            st.subheader("Video Characteristics")
+            
+            characteristics = [
+                f"Platform: {video_status.get('target_platform', 'unknown')}",
+                f"Audience: {video_status.get('target_audience', 'unknown')}",
+                f"Length: {video_status.get('video_length', 0)} seconds",
+                f"Aspect Ratio: {video_status.get('aspect_ratio', 'unknown')}",
+                f"Language: {video_status.get('language', 'unknown')}",
+                f"Style: {video_status.get('visual_style', 'unknown')}"
+            ]
+            
+            bubble_html = "<div>"
+            for char in characteristics:
+                bubble_html += f'<div class="bubble">{char}</div> '
+            bubble_html += "</div>"
+            
+            st.markdown(bubble_html, unsafe_allow_html=True)
+            
+            # Check status and show appropriate content
+            if status == "pending" or status == "running":
+                st.info("Your video is being processed. This may take a few minutes.")
+                
+                # Show refresh button
+                if st.button("Refresh Status"):
+                    st.experimental_rerun()
+                
+                # Show preview if available
+                preview_url = video_status.get("preview")
+                if preview_url:
+                    st.subheader("Preview")
                     st.markdown(f"""
                         <div class="card">
-                            <h3>Script</h3>
-                            <p>{script_text}</p>
+                            <p>View your video preview:</p>
+                            <a href="{preview_url}" target="_blank" class="stButton">
+                                <button>Open Preview</button>
+                            </a>
                         </div>
                     """, unsafe_allow_html=True)
-    else:
-        st.info("No video has been created yet. Go to the 'Create Video' tab to create one.")
+            
+            elif status == "done":
+                st.success("Your video is ready!")
+                
+                # Display the video
+                video_url = video_status.get("video_output")
+                if video_url:
+                    st.subheader("Your Video")
+                    st.markdown(f"""
+                        <div class="video-container">
+                            <video width="100%" controls>
+                                <source src="{video_url}" type="video/mp4">
+                                Your browser does not support video playback.
+                            </video>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Download button
+                    st.download_button(
+                        label="Download Video",
+                        data=requests.get(video_url).content,
+                        file_name=f"{st.session_state.project_name.replace(' ', '_')}.mp4",
+                        mime="video/mp4"
+                    )
+                    
+                    # Show script for reference
+                    st.subheader("Script")
+                    st.markdown(f"""
+                        <div class="card">
+                            <p>{st.session_state.screenplay_data.get('final_script')}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.warning("Video URL not available. There might be an issue with the video.")
+            
+            elif status == "failed":
+                st.error("Video creation failed.")
+                failed_reason = video_status.get("failed_reason", "Unknown reason")
+                st.write(f"Reason: {failed_reason}")
+                
+                # Option to try again
+                if st.button("Try Again"):
+                    st.session_state.step = 4
+                    st.experimental_rerun()
+            
+            # Render button (for pending/running status)
+            if status != "done" and status != "failed":
+                if st.button("Render Final Video"):
+                    with st.spinner("Rendering video..."):
+                        render_result, render_error = render_video(video_id)
+                        
+                        if render_error:
+                            st.error(render_error)
+                        else:
+                            st.session_state.video_data = render_result
+                            st.success("Rendering started!")
+                            st.experimental_rerun()
 
 # Footer
 st.markdown("""
 <div style="text-align: center; margin-top: 2rem; padding: 1rem; background-color: #f8f9fa; border-radius: 10px;">
-    <p>Created with Creatify AI API and Streamlit</p>
+    <p>Complete AI Video Pipeline: Brief → Screenplay → Images → Video</p>
 </div>
 """, unsafe_allow_html=True)
