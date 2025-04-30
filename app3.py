@@ -733,3 +733,19 @@ def render_briefer_page():
                 
                 st.session_state.step = "generate_script"
                 st.rerun()
+                
+# Main application flow control
+if 'user_id' not in st.session_state or not st.session_state.user_id:
+    render_login_page()
+elif st.session_state.step == "dashboard":
+    render_user_dashboard()
+elif st.session_state.step == "start":
+    render_start_page()
+elif st.session_state.step == "briefer":
+    render_briefer_page()
+# Add other steps as needed (edit_script, audio_generation, video_generation, etc.)
+# elif st.session_state.step == "edit_script":
+#     render_edit_script_page()
+# ... other steps
+else:
+    render_start_page()  # Default fallback
