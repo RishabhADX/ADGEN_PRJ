@@ -674,7 +674,7 @@ elif st.session_state.step == 4:
                         lang_voices = voice_by_language[lang]
                         
                         # Pagination settings
-                        voices_per_page = 3  # Show 3 voices per page
+                        voices_per_page = 10  # Show 10 voices per page
                         total_pages = (len(lang_voices) + voices_per_page - 1) // voices_per_page
                         
                         # Start and end indices for current page
