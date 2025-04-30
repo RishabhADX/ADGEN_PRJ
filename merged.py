@@ -603,17 +603,11 @@ elif st.session_state.step == 4:
             video_length = st.slider("Video Length (seconds)", 15, 60, 30)
             aspect_ratio = st.selectbox("Aspect Ratio", ["16x9", "1x1", "9x16"])
 
-        # FIXED Voice Selection Section
+        # Replace the voice selection section with this paginated version
+
+        # FIXED Voice Selection Section with Pagination
         st.subheader("Select Voice")
         
-        # Get available voices
-        voices = get_voices()
-        
-        # Check if we already have a selected voice in session state
-        if 'selected_voice' not in st.session_state:
-            st.session_state.selected_voice = ""
-            st.session_state.selected_voice_name = ""
-            
         # Updated function to get available voices with preview URLs
         @st.cache_data(ttl=3600)
         def get_voices():
@@ -642,7 +636,16 @@ elif st.session_state.step == 4:
         # Get voices with their preview URLs
         voices = get_voices()
         
-        # Create voice selection section with embedded audio players
+        # Check if we already have a selected voice in session state
+        if 'selected_voice' not in st.session_state:
+            st.session_state.selected_voice = ""
+            st.session_state.selected_voice_name = ""
+        
+        # Initialize pagination state for each language if not already present
+        if 'voice_pagination' not in st.session_state:
+            st.session_state.voice_pagination = {}
+        
+        # Create voice selection section with embedded audio players and pagination
         if not voices:
             st.warning("No voices available")
         else:
@@ -657,6 +660,11 @@ elif st.session_state.step == 4:
             # Sort languages alphabetically
             sorted_languages = sorted(voice_by_language.keys())
             
+            # Initialize pagination for any new languages
+            for lang in sorted_languages:
+                if lang not in st.session_state.voice_pagination:
+                    st.session_state.voice_pagination[lang] = 0
+            
             # Create tabs for different language groups
             if sorted_languages:
                 tabs = st.tabs(sorted_languages)
@@ -665,14 +673,28 @@ elif st.session_state.step == 4:
                     with tabs[tab_idx]:
                         lang_voices = voice_by_language[lang]
                         
-                        # Display voices in cards
-                        for voice_idx, voice in enumerate(lang_voices):
+                        # Pagination settings
+                        voices_per_page = 3  # Show 3 voices per page
+                        total_pages = (len(lang_voices) + voices_per_page - 1) // voices_per_page
+                        
+                        # Start and end indices for current page
+                        current_page = st.session_state.voice_pagination[lang]
+                        start_idx = current_page * voices_per_page
+                        end_idx = min(start_idx + voices_per_page, len(lang_voices))
+                        
+                        # Display current page range info
+                        st.markdown(f"**Showing voices {start_idx+1}-{end_idx} of {len(lang_voices)}**")
+                        
+                        # Display only the voices for the current page
+                        for voice_idx in range(start_idx, end_idx):
+                            voice = lang_voices[voice_idx]
                             voice_id = voice.get("voice_id")
                             voice_name = voice.get("name", "Unnamed")
                             voice_gender = voice.get("gender", "Unspecified")
                             
                             # Get preview URL from the accents list if available
                             preview_url = ""
+                            accent_name = ""
                             accents = voice.get("accents", [])
                             if accents and len(accents) > 0:
                                 preview_url = accents[0].get("preview_url", "")
@@ -718,6 +740,37 @@ elif st.session_state.step == 4:
                                 
                                 # Add separator between voices
                                 st.markdown("---")
+                        
+                        # Pagination navigation
+                        if total_pages > 1:
+                            col1, col2, col3 = st.columns([1, 3, 1])
+                            
+                            with col1:
+                                if current_page > 0:
+                                    if st.button("← Previous", key=f"prev_{lang}"):
+                                        st.session_state.voice_pagination[lang] = current_page - 1
+                                        st.rerun()
+                            
+                            with col2:
+                                # Page selector - dropdown to jump to specific page
+                                page_options = [f"Page {i+1} of {total_pages}" for i in range(total_pages)]
+                                selected_page = st.selectbox(
+                                    "Go to page:", 
+                                    page_options, 
+                                    index=current_page,
+                                    key=f"page_select_{lang}"
+                                )
+                                # Extract page number from selection and update if changed
+                                selected_page_num = int(selected_page.split()[1]) - 1
+                                if selected_page_num != current_page:
+                                    st.session_state.voice_pagination[lang] = selected_page_num
+                                    st.rerun()
+                            
+                            with col3:
+                                if current_page < total_pages - 1:
+                                    if st.button("Next →", key=f"next_{lang}"):
+                                        st.session_state.voice_pagination[lang] = current_page + 1
+                                        st.rerun()
             
             # Display currently selected voice
             if st.session_state.selected_voice:
