@@ -1819,5 +1819,4 @@ def main():
         render_video_results()
 
 if __name__ == "__main__":
-    main()"Generated Screenplay"),
-                    f"Images for {screenplay_data.get('title',
+    main(),
