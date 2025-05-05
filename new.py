@@ -8,7 +8,7 @@ import datetime
 import base64
 import json
 import time
-from google.colab import drive
+# from google.colab import drive
 from IPython.display import Audio, display
 from langchain_groq import ChatGroq
 from langchain.schema import SystemMessage
