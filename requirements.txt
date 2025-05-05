@@ -2,3 +2,4 @@ elevenlabs
 crewai
 imagekitio
 google-genai
+langchain_groq
