@@ -1752,10 +1752,10 @@ Remember that brief user responses like "ok" or "sounds good" are often acknowle
                 context=st.session_state.conversation_state["current_context"]
             )
 
-        if st.button("Show Chat Session JSON"):
-            st.json(st.session_state.messages)
-
         
         # Periodically save learning data (every 5 messages)
         if len(st.session_state.messages) % 5 == 0:
             st.session_state.user_learning.save_data()
+            
+        if st.button("Show Chat Session JSON"):
+            st.json(st.session_state.messages)
