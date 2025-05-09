@@ -1061,6 +1061,10 @@ else:
     # Main application UI after authentication
     st.title("AI Content Creator")
     st.subheader(f"Hello, {st.session_state.username}!")
+
+    #show json
+    if st.button("Show Chat Session JSON"):
+        st.json(st.session_state.messages)
     
     # Initialize system prompt
     if "system_prompt" not in st.session_state:
