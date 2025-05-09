@@ -1161,15 +1161,15 @@ Remember that brief user responses like "ok" or "sounds good" are often acknowle
             # Show image preferences
             image_count = st.session_state.user_learning.preferences["total_image_generations"]
             st.write(f"Total image generations: {image_count}")
+
+        #show json
+        if st.button("Show Chat Session JSON"):
+            st.json(st.session_state.messages)
     
     # Display chat history
     for message in st.session_state.messages:
         if message["role"] != "system" and message["role"] != "function":
             display_message(message["role"], message["content"])
-            
-    #show json
-    if st.button("Show Chat Session JSON"):
-        st.json(st.session_state.messages)
 
     # Check for and process pending feedback
     if st.session_state.pending_feedback["needed"]:
