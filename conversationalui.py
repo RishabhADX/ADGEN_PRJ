@@ -12,15 +12,34 @@ from elevenlabs import ElevenLabs, VoiceSettings
 from pathlib import Path
 import time
 from groq import Groq
+import requests
+from PIL import Image as PILImage
+from io import BytesIO
+
+# Google Gemini imports for image generation
+from google import genai
+from google.genai import types
+from imagekitio import ImageKit
 
 # Initialize Groq client
 os.environ["GROQ_API_KEY"] = "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"
 client = Groq()
 
+# Initialize the Google Gemini client
+genai.configure(api_key="AIzaSyBLzfjImenFp60acvXgKygaEDKGqKfHyKI")
+gemini_client = genai.GenerativeModel("gemini-2.0-flash-exp-image-generation")
+
+# Initialize the ImageKit client
+imagekit = ImageKit(
+    private_key='private_OGgux+C54n9PIYDlLdOrYysEWrw=',
+    public_key='public_Qq9s197rBPKyx5eWhq+aN6TQ3Iw=',
+    url_endpoint='https://ik.imagekit.io/b6pq3mgo7'
+)
+
 # Set page configuration
 st.set_page_config(
-    page_title="Voice Chat | AI Assistant",
-    page_icon="🎙️",
+    page_title="Creative Assistant",
+    page_icon="🎨",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -247,13 +266,84 @@ st.markdown("""
             transform: rotate(360deg);
         }
     }
+    .image-gallery {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    .image-card {
+        border-radius: 0.5rem;
+        overflow: hidden;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        background-color: white;
+        width: 100%;
+        max-width: 320px;
+    }
+    .image-card img {
+        width: 100%;
+        height: auto;
+        object-fit: cover;
+        border-top-left-radius: 0.5rem;
+        border-top-right-radius: 0.5rem;
+    }
+    .image-card .prompt {
+        padding: 0.75rem;
+        font-size: 0.875rem;
+        color: #555;
+    }
+    .rating-buttons {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .rating-buttons button {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 50%;
+        border: 1px solid #ddd;
+        background-color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        transition: all 0.2s;
+    }
+    .rating-buttons button:hover {
+        background-color: #4e8df5;
+        color: white;
+        border-color: #4e8df5;
+    }
+    .feature-tabs {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .feature-tab {
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        background-color: #f1f1f1;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .feature-tab.active {
+        background-color: #4e8df5;
+        color: white;
+    }
+    .feature-tab:hover {
+        background-color: #e0e0e0;
+    }
+    .feature-tab.active:hover {
+        background-color: #3b7eea;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # Define directories
 @st.cache_resource
 def ensure_directories():
-    directories = ["users", "sessions", "user_data", "output_audio"]
+    directories = ["users", "sessions", "user_data", "output_audio", "generated_images"]
     for directory in directories:
         os.makedirs(directory, exist_ok=True)
 
@@ -370,8 +460,11 @@ class UserLearningSystem:
             "voice_ratings": {},        # voice_id -> rating (1-5)
             "script_history": [],       # List of successful scripts
             "voice_traits": {},         # Traits -> count (accent, age, gender, etc.)
+            "image_prompts": [],        # List of successful image prompts
+            "image_ratings": {},        # image_prompt -> rating (1-5)
             "last_session": None,       # Timestamp
-            "total_generations": 0      # Count of generations
+            "total_generations": 0,     # Count of audio generations
+            "total_image_generations": 0 # Count of image generations
         }
         
         # Default structure for conversation learning
@@ -460,10 +553,37 @@ class UserLearningSystem:
         # Save the updated data
         self.save_data()
     
+    def record_image_generation(self, prompt, image_url, success=True):
+        """Record an image generation event"""
+        # Increment total image generations
+        self.preferences["total_image_generations"] += 1
+        
+        # Store successful image prompts for learning
+        if success:
+            # Store compact history entry
+            history_entry = {
+                "prompt": prompt,
+                "image_url": image_url,
+                "timestamp": datetime.now().isoformat()
+            }
+            self.preferences["image_prompts"].append(history_entry)
+        
+        # Save the updated data
+        self.save_data()
+    
     def record_rating(self, voice_id, rating):
         """Record a user's rating of a voice (1-5)"""
         if 1 <= rating <= 5:
             self.preferences["voice_ratings"][voice_id] = rating
+            self.save_data()
+            return True
+        return False
+    
+    def record_image_rating(self, prompt, rating):
+        """Record a user's rating of an image (1-5)"""
+        if 1 <= rating <= 5:
+            # Use the prompt as key since we don't have a stable image ID
+            self.preferences["image_ratings"][prompt] = rating
             self.save_data()
             return True
         return False
@@ -592,9 +712,14 @@ def generate_elevenlabs_audio(client, voice_id, text, voice_settings=None):
         )
 
     try:
+        # Create output filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         output_file = f"output_audio/output_{timestamp}.mp3"
         
+        # Ensure the output directory exists
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        
+        # Generate audio
         audio = client.text_to_speech.convert(
             voice_id=voice_id,
             output_format="mp3_44100_128",
@@ -603,9 +728,7 @@ def generate_elevenlabs_audio(client, voice_id, text, voice_settings=None):
             voice_settings=applied_settings
         )
         
-        # Ensure the output directory exists
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        
+        # Save audio to file
         with open(output_file, "wb") as f:
             for chunk in audio:
                 f.write(chunk)
@@ -616,6 +739,7 @@ def generate_elevenlabs_audio(client, voice_id, text, voice_settings=None):
         return {"status": "error", "message": str(e)}
 
 def get_audio_data_url(file_path):
+    """Convert an audio file to a base64 data URL"""
     with open(file_path, "rb") as audio_file:
         audio_bytes = audio_file.read()
     
@@ -638,57 +762,271 @@ def get_voice_trait(voice_data, trait_name, default="Unknown"):
     
     return value
 
+# Image-related functions
+def generate_images(prompts, create_collection=True):
+    """Generate images using Google Gemini and upload to ImageKit"""
+    if isinstance(prompts, str):
+        prompts = [prompts]  # Convert single prompt to list
+    
+    # Create lists to store image information
+    image_urls = []
+    image_file_ids = []
+    
+    # Create directory for images if it doesn't exist
+    os.makedirs("generated_images", exist_ok=True)
+    
+    # Create progress bar
+    progress_bar = st.progress(0)
+    total_prompts = len(prompts)
+    
+    # Process each prompt
+    for i, prompt in enumerate(prompts):
+        progress_text = st.empty()
+        progress_text.text(f"Generating image {i+1}/{total_prompts}: {prompt}")
+        
+        try:
+            # Generate image using Gemini
+            response = gemini_client.generate_content(
+                model="gemini-2.0-flash-exp-image-generation",
+                contents=prompt
+            )
+            
+            # Check for generated image
+            image_found = False
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'inline_data') and part.inline_data.mime_type.startswith('image/'):
+                    image_found = True
+                    
+                    # Save the image
+                    image_data = base64.b64decode(part.inline_data.data)
+                    filename = f"generated_images/image-{i+1:02d}-{uuid.uuid4().hex[:8]}.png"
+                    
+                    with open(filename, "wb") as f:
+                        f.write(image_data)
+                    
+                    # Upload to ImageKit
+                    try:
+                        with open(filename, "rb") as img_file:
+                            upload = imagekit.upload_file(
+                                file=img_file,
+                                file_name=os.path.basename(filename)
+                            )
+                        
+                        image_urls.append(upload["response"]["url"])
+                        image_file_ids.append(upload["response"]["fileId"])
+                    except Exception as upload_error:
+                        # If ImageKit upload fails, use the local file
+                        st.error(f"Error uploading to ImageKit: {str(upload_error)}")
+                        image_urls.append(filename)
+                        image_file_ids.append(None)
+            
+            if not image_found:
+                image_urls.append(None)
+                image_file_ids.append(None)
+                
+        except Exception as e:
+            st.error(f"Error generating image: {str(e)}")
+            image_urls.append(None)
+            image_file_ids.append(None)
+        
+        # Update progress
+        progress = (i + 1) / total_prompts
+        progress_bar.progress(progress)
+    
+    # Clear progress indicators
+    progress_bar.empty()
+    progress_text.empty()
+    
+    # Create collection link if requested
+    collection_url = None
+    if create_collection and any(url is not None for url in image_urls):
+        try:
+            collection_url = create_image_collection(image_urls, "Generated Images Collection")
+        except Exception as e:
+            st.error(f"Error creating collection: {str(e)}")
+    
+    # Prepare results
+    results = []
+    for i, prompt in enumerate(prompts):
+        if i < len(image_urls) and image_urls[i]:
+            file_id = image_file_ids[i] if i < len(image_file_ids) else None
+            results.append({
+                "prompt": prompt,
+                "image_url": image_urls[i],
+                "file_id": file_id,
+                "collection_url": collection_url,
+                "status": "success"
+            })
+        else:
+            results.append({
+                "prompt": prompt,
+                "status": "error",
+                "message": "Failed to generate or upload image"
+            })
+    
+    return results
+
+def create_image_collection(image_urls, title="Generated Images Collection"):
+    """Create a collection link with Creatify API"""
+    # Filter out any None values
+    valid_image_urls = [url for url in image_urls if url is not None]
+    
+    if not valid_image_urls:
+        return None
+    
+    # Prepare payload for Creatify API
+    creatify_url = "https://api.creatify.ai/api/links/link_with_params/"
+    
+    payload = {
+        "title": title,
+        "description": "Images generated with Google Gemini",
+        "image_urls": valid_image_urls,
+        "video_urls": [],
+        "reviews": "AI Generated Images"
+    }
+    
+    headers = {
+        "X-API-ID": "5f8b3a5c-6e33-4e9f-b85c-71941d675270",
+        "X-API-KEY": "c019dd017d22e2e40627f87bc86168b631b9a345",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        # Make the API request
+        response = requests.request("POST", creatify_url, json=payload, headers=headers)
+        
+        # Check for success
+        if response.status_code == 200:
+            try:
+                json_response = response.json()
+                if 'url' in json_response:
+                    return json_response['url']
+            except ValueError:
+                pass
+        
+        return None
+    
+    except Exception as e:
+        st.error(f"Error creating collection link: {e}")
+        return None
+
 # Chat and conversation functions
 def process_message(message, system_prompt, messages, elevenlabs_client, selected_voice_id=None):
     """Process a user message, get AI response, and optionally generate audio"""
     # Add user message to history
     messages.append({"role": "user", "content": message})
     
+    # Define function specs
+    function_specs = [
+        {
+            "name": "generate_elevenlabs_audio",
+            "description": "Generate audio from text using ElevenLabs",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "voice_id": {"type": "string"},
+                    "text": {"type": "string"},
+                    "voice_settings": {
+                        "type": "object",
+                        "properties": {
+                            "stability": {"type": "number", "minimum": 0, "maximum": 1},
+                            "similarity_boost": {"type": "number", "minimum": 0, "maximum": 1},
+                            "style": {"type": "number", "minimum": 0, "maximum": 1},
+                            "use_speaker_boost": {"type": "boolean"},
+                            "speed": {"type": "number", "minimum": 0.7, "maximum": 1.2}
+                        }
+                    }
+                },
+                "required": ["voice_id", "text"]
+            }
+        },
+        {
+            "name": "generate_images",
+            "description": "Generate images based on text prompts",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompts": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    },
+                    "create_collection": {"type": "boolean"}
+                },
+                "required": ["prompts"]
+            }
+        }
+    ]
+    
     # Get AI response
     try:
+        # Manage conversation history for token efficiency
+        if len(messages) > 12:  # Keep system prompt and last 10 messages
+            system_message = messages[0]
+            recent_messages = messages[-11:]
+            messages_to_send = [system_message] + recent_messages
+        else:
+            messages_to_send = messages
+        
+        # Add system prompt if not present
+        if messages_to_send[0]["role"] != "system":
+            messages_to_send = [{"role": "system", "content": system_prompt}] + messages_to_send
+        
+        # Call Groq API
         chat_completion = client.chat.completions.create(
             model="llama3-70b-8192",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                *messages
-            ],
+            messages=messages_to_send,
             temperature=0.7,
-            max_tokens=2048,
-            top_p=1,
-            stream=False
+            max_tokens=1024,
+            tools=function_specs,
+            tool_choice="auto"
         )
         
-        # Get the response text
-        response_text = chat_completion.choices[0].message.content
+        # Get the response
+        response_message = chat_completion.choices[0].message
+        
+        # Check for tool calls
+        audio_result = None
+        images_result = None
+        
+        if response_message.tool_calls:
+            for tool_call in response_message.tool_calls:
+                tool_name = tool_call.function.name
+                arguments = json.loads(tool_call.function.arguments)
+                
+                if tool_name == "generate_elevenlabs_audio" and elevenlabs_client and selected_voice_id:
+                    # Check for audio generation
+                    should_generate_audio = True
+                    
+                    # Generate audio
+                    text_to_speak = arguments.get("text", "")
+                    voice_settings = arguments.get("voice_settings", {})
+                    
+                    audio_result = generate_elevenlabs_audio(
+                        elevenlabs_client,
+                        selected_voice_id,
+                        text_to_speak,
+                        voice_settings
+                    )
+                    
+                elif tool_name == "generate_images":
+                    # Check for image generation
+                    prompts = arguments.get("prompts", [])
+                    create_collection = arguments.get("create_collection", True)
+                    
+                    if prompts:
+                        images_result = generate_images(prompts, create_collection)
         
         # Add assistant response to history
-        messages.append({"role": "assistant", "content": response_text})
+        messages.append({"role": "assistant", "content": response_message.content})
         
-        # Check if we should generate audio
-        audio_result = None
-        if elevenlabs_client and selected_voice_id:
-            # Check for explicit audio generation command
-            should_generate_audio = (
-                "generate audio" in message.lower() or
-                "speak this" in message.lower() or
-                "say this" in message.lower() or
-                "read this" in message.lower()
-            )
-            
-            if should_generate_audio:
-                # Generate audio from the response
-                audio_result = generate_elevenlabs_audio(
-                    elevenlabs_client,
-                    selected_voice_id,
-                    response_text
-                )
-        
-        return response_text, audio_result
+        return response_message.content, audio_result, images_result
     except Exception as e:
         st.error(f"Error getting response: {str(e)}")
-        return f"I'm sorry, I encountered an error: {str(e)}", None
+        error_message = f"I'm sorry, I encountered an error: {str(e)}"
+        messages.append({"role": "assistant", "content": error_message})
+        return error_message, None, None
 
-def display_message(message, is_user=False, audio_file=None):
+def display_message(message, is_user=False, audio_file=None, images=None):
     """Display a chat message"""
     if is_user:
         st.markdown(f"""
@@ -700,15 +1038,58 @@ def display_message(message, is_user=False, audio_file=None):
         </div>
         """, unsafe_allow_html=True)
     else:
+        content_html = f"<p>{message}</p>"
+        
+        # Add audio player if audio is available
+        if audio_file:
+            content_html += f"""
+            <div class="audio-message">
+                <audio class="audio-player" controls>
+                    <source src="{get_audio_data_url(audio_file)}" type="audio/mpeg">
+                    Your browser does not support the audio element.
+                </audio>
+            </div>
+            """
+        
+        # Create message without images first
         st.markdown(f"""
         <div class="chat-message assistant">
             <div class="avatar">🤖</div>
             <div class="content">
-                <p>{message}</p>
-                {f'<div class="audio-message"><audio class="audio-player" controls><source src="{get_audio_data_url(audio_file)}" type="audio/mpeg">Your browser does not support the audio element.</audio></div>' if audio_file else ''}
+                {content_html}
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
+        # Display images if available
+        if images and len(images) > 0:
+            st.markdown("<div class='image-gallery'>", unsafe_allow_html=True)
+            cols = st.columns(min(3, len(images)))
+            
+            for i, image_info in enumerate(images):
+                if image_info["status"] == "success":
+                    col = cols[i % len(cols)]
+                    with col:
+                        st.image(image_info["image_url"], caption=image_info["prompt"][:50] + "..." if len(image_info["prompt"]) > 50 else image_info["prompt"])
+                        
+                        # Add rating buttons if needed
+                        col1, col2, col3, col4, col5 = st.columns(5)
+                        with col1:
+                            st.button("1★", key=f"rate_img_{i}_1", on_click=lambda prompt=image_info["prompt"], rating=1: rate_image(prompt, rating))
+                        with col2:
+                            st.button("2★", key=f"rate_img_{i}_2", on_click=lambda prompt=image_info["prompt"], rating=2: rate_image(prompt, rating))
+                        with col3:
+                            st.button("3★", key=f"rate_img_{i}_3", on_click=lambda prompt=image_info["prompt"], rating=3: rate_image(prompt, rating))
+                        with col4:
+                            st.button("4★", key=f"rate_img_{i}_4", on_click=lambda prompt=image_info["prompt"], rating=4: rate_image(prompt, rating))
+                        with col5:
+                            st.button("5★", key=f"rate_img_{i}_5", on_click=lambda prompt=image_info["prompt"], rating=5: rate_image(prompt, rating))
+            
+            # If we have a collection URL, show it
+            if images[0].get("collection_url"):
+                st.markdown(f"[View all images in collection]({images[0]['collection_url']})")
+            
+            st.markdown("</div>", unsafe_allow_html=True)
 
 def display_system_message(message):
     """Display a system message"""
@@ -798,16 +1179,15 @@ def init_session_state():
         
     if "session_id" not in st.session_state:
         st.session_state.session_id = None
-        
-    if "api_key_provided" not in st.session_state:
-        st.session_state.api_key_provided = False
-        
+    
+    # API keys and clients
     if "elevenlabs_api_key" not in st.session_state:
         st.session_state.elevenlabs_api_key = ""
         
     if "elevenlabs_client" not in st.session_state:
         st.session_state.elevenlabs_client = None
-        
+    
+    # Voice options
     if "voices" not in st.session_state:
         st.session_state.voices = []
         
@@ -817,12 +1197,6 @@ def init_session_state():
     if "selected_voice_data" not in st.session_state:
         st.session_state.selected_voice_data = None
     
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-        
-    if "user_learning" not in st.session_state:
-        st.session_state.user_learning = None
-        
     if "voice_settings" not in st.session_state:
         st.session_state.voice_settings = {
             "stability": 0.5,
@@ -832,34 +1206,47 @@ def init_session_state():
             "speed": 1.0
         }
     
+    # Conversation state
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+        
+    if "user_learning" not in st.session_state:
+        st.session_state.user_learning = None
+    
+    # UI state
+    if "show_voice_selection" not in st.session_state:
+        st.session_state.show_voice_selection = False
+        
     if "voice_search_query" not in st.session_state:
         st.session_state.voice_search_query = ""
         
-    if "show_voice_selection" not in st.session_state:
-        st.session_state.show_voice_selection = False
+    if "show_image_generation" not in st.session_state:
+        st.session_state.show_image_generation = False
+    
+    if "image_prompts" not in st.session_state:
+        st.session_state.image_prompts = [""]
+        
+    if "active_feature" not in st.session_state:
+        st.session_state.active_feature = None
 
 # Callback functions
-def set_api_key():
-    api_key = st.session_state.api_key_input
+def set_elevenlabs_api_key():
+    api_key = st.session_state.elevenlabs_api_key_input
     if api_key:
         st.session_state.elevenlabs_api_key = api_key
-        st.session_state.api_key_provided = True
-        try:
-            st.session_state.elevenlabs_client = ElevenLabs(api_key=api_key)
-            # Load voices automatically
-            load_voices()
-        except Exception as e:
-            st.error(f"Error setting API key: {str(e)}")
-            st.session_state.api_key_provided = False
+        st.session_state.elevenlabs_client = ElevenLabs(api_key=api_key)
+        # Load voices automatically
+        load_voices()
     else:
         st.error("Please enter a valid API key")
 
 def load_voices():
     if st.session_state.elevenlabs_client:
-        voices = list_elevenlabs_voices(st.session_state.elevenlabs_client)
-        if voices:
-            st.session_state.voices = voices
-            return True
+        with st.spinner("Loading voices..."):
+            voices = list_elevenlabs_voices(st.session_state.elevenlabs_client)
+            if voices:
+                st.session_state.voices = voices
+                return True
     return False
 
 def select_voice(voice_id, voice_name):
@@ -886,6 +1273,72 @@ def select_voice(voice_id, voice_name):
 def toggle_voice_selection():
     st.session_state.show_voice_selection = not st.session_state.show_voice_selection
 
+def toggle_image_generation():
+    st.session_state.show_image_generation = not st.session_state.show_image_generation
+
+def add_image_prompt():
+    st.session_state.image_prompts.append("")
+
+def remove_image_prompt(index):
+    if len(st.session_state.image_prompts) > 1:
+        st.session_state.image_prompts.pop(index)
+
+def update_image_prompt(index, value):
+    st.session_state.image_prompts[index] = value
+
+def generate_images_from_ui():
+    prompts = [p for p in st.session_state.image_prompts if p.strip()]
+    if not prompts:
+        st.error("Please enter at least one prompt")
+        return
+    
+    results = generate_images(prompts)
+    
+    # Record in user learning
+    if st.session_state.user_learning:
+        for result in results:
+            if result["status"] == "success":
+                st.session_state.user_learning.record_image_generation(
+                    result["prompt"],
+                    result["image_url"]
+                )
+    
+    # Add to chat history
+    if any(result["status"] == "success" for result in results):
+        # Count successful images
+        success_count = sum(1 for result in results if result["status"] == "success")
+        
+        # Create user message
+        prompts_text = "\n".join([f"- {p}" for p in prompts])
+        user_message = f"Generate images with these prompts:\n{prompts_text}"
+        
+        # Create assistant message
+        assistant_message = f"I've generated {success_count} out of {len(prompts)} images based on your prompts."
+        
+        # Add to messages
+        st.session_state.messages.append({"role": "user", "content": user_message})
+        st.session_state.messages.append({"role": "assistant", "content": assistant_message, "images": results})
+        
+        # Reset prompts
+        st.session_state.image_prompts = [""]
+        st.session_state.show_image_generation = False
+    else:
+        st.error("Failed to generate any images. Please try different prompts.")
+
+def rate_voice(voice_id, rating):
+    if st.session_state.user_learning:
+        if st.session_state.user_learning.record_rating(voice_id, rating):
+            st.success(f"Voice rated {rating}/5!")
+            return True
+    return False
+
+def rate_image(prompt, rating):
+    if st.session_state.user_learning:
+        if st.session_state.user_learning.record_image_rating(prompt, rating):
+            st.success(f"Image rated {rating}/5!")
+            return True
+    return False
+
 def search_voices():
     st.session_state.voice_search_query = st.session_state.voice_search_input
 
@@ -899,28 +1352,36 @@ def logout():
     init_session_state()
     st.rerun()
 
+def set_active_feature(feature):
+    st.session_state.active_feature = feature
+
 # Define system prompt
 def get_system_prompt(username, selected_voice_name=None, user_learning=None):
     base_prompt = """
-You are an AI assistant specializing in voice content creation through ElevenLabs. Your primary goal is to help users create high-quality voice content in a conversational manner.
+You are a creative assistant specializing in helping users create high-quality audio content and generate images. You guide users through script creation, voice selection, audio generation, and image generation with a conversational, helpful approach.
 
 CORE PRINCIPLES:
-1. CONVERSATIONAL & HELPFUL - Guide users through their voice content needs naturally
-2. GATHER INFORMATION - Ask questions to understand what the user wants to create
-3. PROVIDE GUIDANCE - Help users improve their scripts for optimal audio quality
-4. EXPLAIN VOICE SELECTION - Help users understand different voice characteristics
-5. SUGGEST IMPROVEMENTS - Offer constructive suggestions for script improvement
+1. GATHER COMPLETE INFORMATION before suggesting function calls
+2. CONFIRM CRITICAL DETAILS explicitly before generating final outputs
+3. ASK FOR CLARIFICATION when user responses are ambiguous
+4. ENSURE SCRIPTS HAVE NO PLACEHOLDERS before generating audio
+5. BUILD TOWARDS COMPLETION step by step
 
-VOICE GENERATION CAPABILITIES:
-- When users ask you to "generate audio", "speak this", "say this", or "read this", you'll convert your response to audio
-- You can suggest voice options based on content type (e.g., narration, character voices)
-- You provide guidance on script length, pacing, and pronunciation
+AUDIO CAPABILITIES:
+- You can generate audio from your responses when users ask you to "speak this" or "generate audio"
+- You can help users create scripts for various purposes
+- You can explain voice characteristics and suggest options
+
+IMAGE CAPABILITIES:
+- You can generate images based on text prompts using Google Gemini
+- You help users create effective image prompts
+- You can create collections of related images
 
 CONVERSATION TIPS:
-- Ask about the purpose of their audio content
-- Help refine scripts by suggesting improvements
-- Offer to generate audio when the script seems polished
-- Explain different voice characteristics when relevant
+- Ask about the purpose of their content
+- Help refine scripts and prompts
+- Explain different voice and image options
+- Be conversational and friendly
 """
 
     # Add personalization if available
@@ -937,7 +1398,10 @@ CONVERSATION TIPS:
         personalization = ["USER PREFERENCES:"]
         
         if user_learning.preferences["total_generations"] > 0:
-            personalization.append(f"- User has generated {user_learning.preferences['total_generations']} audio clips")
+            personalization.append(f"- User has generated {user_learning.preferences['total_generations']} audio clips previously.")
+        
+        if user_learning.preferences["total_image_generations"] > 0:
+            personalization.append(f"- User has generated {user_learning.preferences['total_image_generations']} images previously.")
         
         if preferred_traits:
             trait_text = ", ".join(preferred_traits)
@@ -1011,30 +1475,36 @@ def main():
             if st.button("Logout"):
                 logout()
         
-        st.markdown("### 🔌 API Connection")
+        st.markdown("### 🎙️ ElevenLabs Connection")
         
-        if not st.session_state.api_key_provided:
-            st.text_input("ElevenLabs API Key", key="api_key_input", type="password")
-            st.button("Connect API", on_click=set_api_key)
+        if not st.session_state.elevenlabs_client:
+            st.text_input("ElevenLabs API Key", type="password", key="elevenlabs_api_key_input")
+            st.button("Connect", on_click=set_elevenlabs_api_key)
             st.markdown("""
             <small>Don't have an API key? Get one at <a href="https://elevenlabs.io/sign-up" target="_blank">elevenlabs.io</a></small>
             """, unsafe_allow_html=True)
         else:
             st.success("Connected to ElevenLabs ✓")
             if st.button("Change API Key"):
-                st.session_state.api_key_provided = False
                 st.session_state.elevenlabs_api_key = ""
                 st.session_state.elevenlabs_client = None
                 st.rerun()
         
         # Only show these options if authenticated
         if st.session_state.authenticated:
-            st.markdown("### ⚙️ Chat Options")
+            st.markdown("### ⚙️ Options")
             
             # Voice selection button
-            voice_btn_label = "Change Voice" if st.session_state.selected_voice_id else "Select Voice"
-            if st.button(voice_btn_label):
-                toggle_voice_selection()
+            if st.session_state.elevenlabs_client:
+                voice_btn_label = "Change Voice" if st.session_state.selected_voice_id else "Select Voice"
+                if st.button(voice_btn_label):
+                    toggle_voice_selection()
+                    set_active_feature("voice")
+            
+            # Image generation button
+            if st.button("Create Images"):
+                toggle_image_generation()
+                set_active_feature("image")
             
             # Reset conversation button
             if st.button("New Conversation"):
@@ -1061,25 +1531,73 @@ def main():
     if not st.session_state.authenticated:
         st.markdown("""
         <div class="chat-header">
-            <div class="icon">🎙️</div>
-            <h1>Voice Chat Assistant</h1>
+            <div class="icon">🎨</div>
+            <h1>Creative Assistant</h1>
         </div>
         """, unsafe_allow_html=True)
-        st.info("Please log in or continue as a guest to start using Voice Chat")
-    elif not st.session_state.api_key_provided:
+        st.info("Please log in or continue as a guest to start using the Creative Assistant")
+    elif not st.session_state.elevenlabs_client:
         st.markdown("""
         <div class="chat-header">
-            <div class="icon">🎙️</div>
-            <h1>Voice Chat Assistant</h1>
+            <div class="icon">🎨</div>
+            <h1>Creative Assistant</h1>
         </div>
         """, unsafe_allow_html=True)
-        st.info("Please provide your ElevenLabs API key to get started")
+        st.info("Please provide your ElevenLabs API key to enable voice generation")
+        
+        # Still allow chat without voice features
+        chat_container = st.container()
+        
+        # Display chat messages
+        with chat_container:
+            # Welcome message if no messages yet
+            if not st.session_state.messages:
+                display_system_message(
+                    "👋 Welcome to the Creative Assistant! I can help you generate images and create audio content. "
+                    "To use all features, please connect your ElevenLabs API key in the sidebar."
+                )
+            
+            # Display all messages
+            for i, message in enumerate(st.session_state.messages):
+                if message["role"] == "user":
+                    display_message(message["content"], is_user=True)
+                elif message["role"] == "assistant":
+                    # Get images if available
+                    images = message.get("images")
+                    
+                    display_message(message["content"], is_user=False, images=images)
+                elif message["role"] == "system":
+                    display_system_message(message["content"])
+            
+        # Chat input
+        user_input = st.chat_input("Type your message here...")
+        
+        # Process user input
+        if user_input:
+            # Get system prompt
+            system_prompt = get_system_prompt(
+                st.session_state.username,
+                None,
+                st.session_state.user_learning
+            )
+            
+            # Add user message to state and display
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            
+            # Record in user learning system
+            if st.session_state.user_learning and len(st.session_state.messages) >= 2:
+                last_assistant_message = next((m["content"] for m in reversed(st.session_state.messages) if m["role"] == "assistant"), None)
+                if last_assistant_message:
+                    st.session_state.user_learning.record_conversation_turn(user_input, last_assistant_message)
+            
+            # Rerun to display user message
+            st.rerun()
     else:
         # Chat header
         st.markdown("""
         <div class="chat-header">
-            <div class="icon">🎙️</div>
-            <h1>Voice Chat</h1>
+            <div class="icon">🎨</div>
+            <h1>Creative Assistant</h1>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1095,6 +1613,14 @@ def main():
                 <span style="font-weight: bold;">🎤 {selected_voice_name}</span>
             </div>
             """, unsafe_allow_html=True)
+        
+        # Feature tabs
+        if st.session_state.active_feature == "voice":
+            st.session_state.show_voice_selection = True
+            st.session_state.show_image_generation = False
+        elif st.session_state.active_feature == "image":
+            st.session_state.show_voice_selection = False
+            st.session_state.show_image_generation = True
         
         # Voice selection interface
         if st.session_state.show_voice_selection:
@@ -1167,8 +1693,44 @@ def main():
                         # Selection button
                         if st.button(f"Select", key=f"select_{voice['voice_id']}"):
                             select_voice(voice["voice_id"], voice["name"])
+                            st.session_state.active_feature = None
                             
                         st.markdown("</div>", unsafe_allow_html=True)
+                        
+                # Close button
+                if st.button("Close Voice Selection"):
+                    st.session_state.show_voice_selection = False
+                    st.session_state.active_feature = None
+        
+        # Image generation interface
+        if st.session_state.show_image_generation:
+            st.markdown("### Create Images")
+            
+            # Instructions
+            st.info("Enter one or more image prompts and click 'Generate Images' to create visuals with Google Gemini.")
+            
+            # Prompt inputs
+            for i, prompt in enumerate(st.session_state.image_prompts):
+                col1, col2 = st.columns([10, 1])
+                with col1:
+                    new_prompt = st.text_area(f"Prompt {i+1}", value=prompt, height=70, key=f"prompt_{i}")
+                    update_image_prompt(i, new_prompt)
+                with col2:
+                    if len(st.session_state.image_prompts) > 1:
+                        st.button("✖", key=f"remove_{i}", on_click=remove_image_prompt, args=(i,))
+            
+            # Add prompt button
+            if len(st.session_state.image_prompts) < 5:  # Limit to 5 prompts
+                st.button("+ Add Prompt", on_click=add_image_prompt)
+            
+            # Generation button
+            if st.button("Generate Images"):
+                generate_images_from_ui()
+            
+            # Close button
+            if st.button("Close Image Creation"):
+                st.session_state.show_image_generation = False
+                st.session_state.active_feature = None
         
         # Chat message container
         chat_container = st.container()
@@ -1178,9 +1740,8 @@ def main():
             # Welcome message if no messages yet
             if not st.session_state.messages:
                 display_system_message(
-                    "👋 Welcome to Voice Chat! I'm your AI assistant for creating voice content. "
-                    "How can I help you today? You can ask me to write scripts, suggest voice options, "
-                    "or generate audio from text."
+                    "👋 Welcome to the Creative Assistant! I can help you create voice content and generate images. "
+                    "How can I help you today?"
                 )
                 
                 if not selected_voice_name:
@@ -1195,13 +1756,19 @@ def main():
                 elif message["role"] == "assistant":
                     # Check if we have an audio file for this message
                     audio_file = None
-                    if i > 0 and i+1 < len(st.session_state.messages) and st.session_state.messages[i+1]["role"] == "system" and "audio_file" in st.session_state.messages[i+1]["content"]:
-                        audio_file = st.session_state.messages[i+1]["content"]["audio_file"]
+                    for j in range(i+1, len(st.session_state.messages)):
+                        if st.session_state.messages[j]["role"] == "system" and isinstance(st.session_state.messages[j]["content"], dict):
+                            if "audio_file" in st.session_state.messages[j]["content"]:
+                                audio_file = st.session_state.messages[j]["content"]["audio_file"]
+                                break
                     
-                    display_message(message["content"], is_user=False, audio_file=audio_file)
+                    # Get images if available
+                    images = message.get("images")
+                    
+                    display_message(message["content"], is_user=False, audio_file=audio_file, images=images)
                 elif message["role"] == "system":
+                    # Skip system messages with audio files
                     if isinstance(message["content"], dict) and "audio_file" in message["content"]:
-                        # This is an audio file system message, skip displaying it
                         continue
                     else:
                         display_system_message(message["content"])
@@ -1233,7 +1800,19 @@ def main():
         # Process assistant response after rerun if there's a user message
         if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
             # Show typing indicator
-            display_typing_indicator()
+            typing_indicator = st.empty()
+            typing_indicator.markdown("""
+            <div class="chat-message assistant">
+                <div class="avatar">🤖</div>
+                <div class="content">
+                    <div class="typing-indicator">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
             
             # Get system prompt
             system_prompt = get_system_prompt(
@@ -1244,7 +1823,7 @@ def main():
             
             # Process message and get response
             user_message = st.session_state.messages[-1]["content"]
-            response_text, audio_result = process_message(
+            response_text, audio_result, images_result = process_message(
                 user_message,
                 system_prompt,
                 [m for m in st.session_state.messages if m["role"] != "system"],  # Exclude system messages
@@ -1252,8 +1831,26 @@ def main():
                 st.session_state.selected_voice_id
             )
             
+            # Clear typing indicator
+            typing_indicator.empty()
+            
             # Add response to session state
-            st.session_state.messages.append({"role": "assistant", "content": response_text})
+            assistant_message = {"role": "assistant", "content": response_text}
+            
+            # Add images if available
+            if images_result:
+                assistant_message["images"] = images_result
+                
+                # Record in user learning system
+                if st.session_state.user_learning:
+                    for result in images_result:
+                        if result["status"] == "success":
+                            st.session_state.user_learning.record_image_generation(
+                                result["prompt"],
+                                result["image_url"]
+                            )
+            
+            st.session_state.messages.append(assistant_message)
             
             # Add audio result if available
             if audio_result and audio_result["status"] == "success":
