@@ -13,7 +13,7 @@ import requests
 from collections import Counter
 
 # Import the necessary libraries
-from openai import OpenAI
+# from openai import OpenAI
 from elevenlabs import ElevenLabs, VoiceSettings
 from groq import Groq
 from google import genai
