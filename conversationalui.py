@@ -623,17 +623,35 @@ def generate_elevenlabs_audio(voice_id, text, voice_settings=None):
         
 # image generation
 def generate_images(prompts, create_collection=True):
-    """Generate images using Google Gemini and upload to ImageKit"""
+    """Generate images using Google Gemini and upload to ImageKit.
+
+    Args:
+        prompts: A single prompt string or a list of prompt strings.
+        create_collection: Boolean indicating whether to create a collection link
+            using the Creatify API.  Defaults to True.
+
+    Returns:
+        A list of dictionaries, where each dictionary contains the results for a
+        single prompt.  Each dictionary will have the following keys:
+            - prompt: The original prompt string.
+            - image_url: The URL of the uploaded image on ImageKit, or None on failure.
+            - file_id: The ImageKit file ID, or None on failure.
+            - collection_url: The URL of the created Creatify collection (if
+              create_collection is True and successful), or None otherwise.
+            - status: "success" if the image was generated and uploaded
+              successfully, "error" otherwise.
+            - message: A descriptive error message in case of failure.
+    """
     if isinstance(prompts, str):
         prompts = [prompts]  # Convert single prompt to list
-    
-    # Import PIL correctly to avoid naming conflict
+
+    # Import PIL correctly
     from PIL import Image as PILImage
-    
+
     # Create lists to store image information
     image_urls = []
     image_file_ids = []
-    
+
     # Create directory for images if it doesn't exist
     try:
         os.makedirs("generated_images", exist_ok=True)
@@ -641,11 +659,11 @@ def generate_images(prompts, create_collection=True):
     except Exception as e:
         print(f"Error creating directory: {str(e)}")
         # Continue anyway, we'll handle file paths later
-    
+
     # Process each prompt
     for i, prompt in enumerate(prompts):
         print(f"\nProcessing prompt {i+1}/{len(prompts)}: {prompt}")
-        
+
         try:
             # Generate content using Gemini API
             try:
@@ -655,6 +673,7 @@ def generate_images(prompts, create_collection=True):
                     config=types.GenerateContentConfig(
                         response_modalities=['TEXT', 'IMAGE']
                     )
+                    # Removed the 'generation_config' parameter
                 )
             except Exception as api_error:
                 print(f"Gemini API error: {str(api_error)}")
@@ -663,48 +682,35 @@ def generate_images(prompts, create_collection=True):
                 image_urls.append(None)
                 image_file_ids.append(None)
                 continue
-            
+
             # Check if we have a valid response
             if not response.candidates or not response.candidates[0].content.parts:
                 print(f"No content generated for prompt {i+1}")
                 image_urls.append(None)
                 image_file_ids.append(None)
                 continue
-            
+
             # Process results
             image_found = False
             for part in response.candidates[0].content.parts:
                 if getattr(part, "text", None):
                     print(f"Text response: {part.text}")
-                    
+
                 elif getattr(part, "inline_data", None):
                     image_found = True
-                    
+
                     try:
-                        # Save the generated image
+                        # Use BytesIO object directly for ImageKit upload
                         image_data = BytesIO(part.inline_data.data)
-                        image = PILImage.open(image_data)  # Using PILImage, not Image
-                        
-                        # Try to save in the directory
+
+                        # Upload to ImageKit directly from BytesIO
                         try:
-                            filename = f"generated_images/image-{i+1:02d}-{uuid.uuid4().hex[:8]}.png"
-                            image.save(filename)
-                        except Exception as dir_error:
-                            # Fallback to current directory
-                            print(f"Error saving to generated_images directory: {str(dir_error)}")
                             filename = f"image-{i+1:02d}-{uuid.uuid4().hex[:8]}.png"
-                            image.save(filename)
-                            
-                        print(f"Saved generated image as {filename}")
-                        
-                        # Upload to ImageKit
-                        try:
-                            with open(filename, "rb") as img_file:
-                                upload = imagekit.upload(
-                                    file=img_file,
-                                    file_name=os.path.basename(filename)
-                                )
-                            
+                            upload = imagekit.upload(
+                                file=image_data,
+                                file_name=filename
+                            )
+
                             image_urls.append(upload.url)
                             image_file_ids.append(upload.file_id)
                             print(f"Uploaded to ImageKit: {upload.url}")
@@ -712,26 +718,26 @@ def generate_images(prompts, create_collection=True):
                             print(f"Error uploading to ImageKit: {str(upload_error)}")
                             image_urls.append(None)
                             image_file_ids.append(None)
-                            
+
                     except Exception as process_error:
                         print(f"Error processing image data: {str(process_error)}")
                         import traceback
                         traceback.print_exc()
                         image_urls.append(None)
                         image_file_ids.append(None)
-            
+
             if not image_found:
                 print(f"No image was generated for prompt {i+1}")
                 image_urls.append(None)
                 image_file_ids.append(None)
-                
+
         except Exception as general_error:
             print(f"Error in image generation process: {str(general_error)}")
             import traceback
             traceback.print_exc()
             image_urls.append(None)
             image_file_ids.append(None)
-    
+
     collection_url = None
     # Create a collection link if requested and we have images
     if create_collection and any(url is not None for url in image_urls):
@@ -741,7 +747,7 @@ def generate_images(prompts, create_collection=True):
             print(f"Error creating collection: {str(collection_error)}")
             import traceback
             traceback.print_exc()
-    
+
     # Return results
     results = []
     for i, prompt in enumerate(prompts):
@@ -758,9 +764,11 @@ def generate_images(prompts, create_collection=True):
             results.append({
                 "prompt": prompt,
                 "status": "error",
-                "message": "Failed to generate or upload image"
+                "message": "Failed to generate or upload image",
+                "image_url": None,
+                "file_id": None,
+                "collection_url": None
             })
-    
     return results
 
 # ==== Function to create image collection ====
@@ -768,13 +776,13 @@ def create_image_collection(image_urls, title="Generated Images Collection"):
     """Create a collection link with Creatify API"""
     # Filter out any None values
     valid_image_urls = [url for url in image_urls if url is not None]
-    
+
     if not valid_image_urls:
         return None
-    
+
     # Prepare payload for Creatify API
     creatify_url = "https://api.creatify.ai/api/links/link_with_params/"
-    
+
     payload = {
         "title": title,
         "description": "Images generated with Google Gemini",
@@ -782,17 +790,17 @@ def create_image_collection(image_urls, title="Generated Images Collection"):
         "video_urls": [],
         "reviews": "AI Generated Images"
     }
-    
+
     headers = {
         "X-API-ID": "5f8b3a5c-6e33-4e9f-b85c-71941d675270",
         "X-API-KEY": "c019dd017d22e2e40627f87bc86168b631b9a345",
         "Content-Type": "application/json"
     }
-    
+
     try:
         # Make the API request
         response = requests.request("POST", creatify_url, json=payload, headers=headers)
-        
+
         # Check for success
         if response.status_code == 200:
             try:
@@ -802,13 +810,14 @@ def create_image_collection(image_urls, title="Generated Images Collection"):
                     return json_response['url']
             except ValueError:
                 pass
-        
+
         print(f"Failed to create collection link. Status code: {response.status_code}")
         return None
-    
+
     except Exception as e:
         print(f"Error creating collection link: {e}")
         return None
+
 
 
 # ====================== HELPER FUNCTIONS ======================
