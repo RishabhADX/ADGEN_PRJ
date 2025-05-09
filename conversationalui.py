@@ -1068,7 +1068,7 @@ else:
         
     # Add this in your main app UI section, after the authentication check
     if st.session_state.user_learning:
-        if st.button("Show User Preferences JSON"):
+        if st.button("Show User Preferences JSON2"):
             # Get the user preferences data
             preferences = st.session_state.user_learning.preferences
             conversation_learning = st.session_state.user_learning.conversation_learning
