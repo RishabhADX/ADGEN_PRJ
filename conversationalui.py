@@ -622,7 +622,7 @@ def generate_elevenlabs_audio(voice_id, text, voice_settings=None):
         return {"status": "error", "message": str(e)}
         
 # image generation
-def generate_images(prompts, create_collection=True):
+def generate_images(prompts, create_collection=False):
     """Generate images using Google Gemini and upload to ImageKit"""
     gemini_client = clients["gemini"]
     imagekit = clients["imagekit"]
