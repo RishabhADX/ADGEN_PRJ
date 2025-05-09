@@ -1069,12 +1069,12 @@ else:
     
         # Place the "Show Chat Session JSON" button in the first column
         with col1:
-            if st.button("Show Chat Session JSON"):
+            if st.button("Show Chat Session"):
                 st.json(st.session_state.messages)
     
         # Place the "Show User Preferences JSON" button in the second column
         with col2:
-            if st.button("Show User Preferences JSON"):
+            if st.button("Show User Preferences"):
                 # Get the user preferences data
                 preferences = st.session_state.user_learning.preferences
                 conversation_learning = st.session_state.user_learning.conversation_learning
