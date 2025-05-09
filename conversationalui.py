@@ -622,25 +622,31 @@ def generate_elevenlabs_audio(voice_id, text, voice_settings=None):
         return {"status": "error", "message": str(e)}
         
 # image generation
-def generate_images(prompts, create_collection=False):
+def generate_images(prompts, create_collection=True):
     """Generate images using Google Gemini and upload to ImageKit"""
-    gemini_client = clients["gemini"]
-    imagekit = clients["imagekit"]
-
     if isinstance(prompts, str):
         prompts = [prompts]  # Convert single prompt to list
-
+    
+    # Import PIL correctly to avoid naming conflict
+    from PIL import Image as PILImage
+    
     # Create lists to store image information
     image_urls = []
     image_file_ids = []
-    image_bytes_list = []
-    error_messages = []
-
+    
+    # Create directory for images if it doesn't exist
+    try:
+        os.makedirs("generated_images", exist_ok=True)
+        print("Created or verified 'generated_images' directory")
+    except Exception as e:
+        print(f"Error creating directory: {str(e)}")
+        # Continue anyway, we'll handle file paths later
+    
     # Process each prompt
     for i, prompt in enumerate(prompts):
+        print(f"\nProcessing prompt {i+1}/{len(prompts)}: {prompt}")
+        
         try:
-            print(f"Processing prompt {i+1}/{len(prompts)}: {prompt[:50]}...")
-
             # Generate content using Gemini API
             try:
                 response = gemini_client.models.generate_content(
@@ -650,120 +656,114 @@ def generate_images(prompts, create_collection=False):
                         response_modalities=['TEXT', 'IMAGE']
                     )
                 )
-                print(f"Successfully called Gemini API for prompt {i+1}")
             except Exception as api_error:
-                print(f"Gemini API error for prompt {i+1}: {str(api_error)}")
-                error_msg = f"Gemini API error for prompt {i+1}: {str(api_error)}"
-                error_messages.append(error_msg)
+                print(f"Gemini API error: {str(api_error)}")
+                import traceback
+                traceback.print_exc()
                 image_urls.append(None)
                 image_file_ids.append(None)
-                image_bytes_list.append(None)
                 continue
-
+            
             # Check if we have a valid response
             if not response.candidates or not response.candidates[0].content.parts:
-                error_msg = f"No valid content in response for prompt {i+1}"
-                print(error_msg)
-                error_messages.append(error_msg)
+                print(f"No content generated for prompt {i+1}")
                 image_urls.append(None)
                 image_file_ids.append(None)
-                image_bytes_list.append(None)
                 continue
-
+            
             # Process results
             image_found = False
             for part in response.candidates[0].content.parts:
-                if getattr(part, "inline_data", None):
+                if getattr(part, "text", None):
+                    print(f"Text response: {part.text}")
+                    
+                elif getattr(part, "inline_data", None):
                     image_found = True
-                    print(f"Found image data in response for prompt {i+1}")
-
-                    # Get image data
+                    
                     try:
+                        # Save the generated image
                         image_data = BytesIO(part.inline_data.data)
-                        image_bytes_list.append(image_data.getvalue())
-                        print(f"Successfully extracted image data for prompt {i+1}")
-                    except Exception as image_data_error:
-                        error_msg = f"Error extracting image data for prompt {i+1}: {str(image_data_error)}"
-                        print(error_msg)
-                        error_messages.append(error_msg)
+                        image = PILImage.open(image_data)  # Using PILImage, not Image
+                        
+                        # Try to save in the directory
+                        try:
+                            filename = f"generated_images/image-{i+1:02d}-{uuid.uuid4().hex[:8]}.png"
+                            image.save(filename)
+                        except Exception as dir_error:
+                            # Fallback to current directory
+                            print(f"Error saving to generated_images directory: {str(dir_error)}")
+                            filename = f"image-{i+1:02d}-{uuid.uuid4().hex[:8]}.png"
+                            image.save(filename)
+                            
+                        print(f"Saved generated image as {filename}")
+                        
+                        # Upload to ImageKit
+                        try:
+                            with open(filename, "rb") as img_file:
+                                upload = imagekit.upload(
+                                    file=img_file,
+                                    file_name=os.path.basename(filename)
+                                )
+                            
+                            image_urls.append(upload.url)
+                            image_file_ids.append(upload.file_id)
+                            print(f"Uploaded to ImageKit: {upload.url}")
+                        except Exception as upload_error:
+                            print(f"Error uploading to ImageKit: {str(upload_error)}")
+                            image_urls.append(None)
+                            image_file_ids.append(None)
+                            
+                    except Exception as process_error:
+                        print(f"Error processing image data: {str(process_error)}")
+                        import traceback
+                        traceback.print_exc()
                         image_urls.append(None)
                         image_file_ids.append(None)
-                        image_bytes_list.append(None)
-                        continue
-
-                    # Upload to ImageKit
-                    try:
-                        print(f"Uploading image {i+1} to ImageKit")
-                        upload = imagekit.upload(
-                            file=BytesIO(part.inline_data.data),
-                            file_name=f"image-{uuid.uuid4().hex[:8]}.png"
-                        )
-
-                        print(f"Successfully uploaded image {i+1} to ImageKit")
-                        image_urls.append(upload.url)
-                        image_file_ids.append(upload.file_id)
-                    except Exception as upload_error:
-                        error_msg = f"Error uploading to ImageKit for prompt {i+1}: {str(upload_error)}"
-                        print(error_msg)
-                        error_messages.append(error_msg)
-                        image_urls.append(None)
-                        image_file_ids.append(None)
-
+            
             if not image_found:
-                error_msg = f"No image found in response for prompt {i+1}"
-                print(error_msg)
-                error_messages.append(error_msg)
+                print(f"No image was generated for prompt {i+1}")
                 image_urls.append(None)
                 image_file_ids.append(None)
-                image_bytes_list.append(None)
-
+                
         except Exception as general_error:
-            error_msg = f"Error in image generation for prompt {i+1}: {str(general_error)}"
-            print(error_msg)
-            error_messages.append(error_msg)
+            print(f"Error in image generation process: {str(general_error)}")
+            import traceback
+            traceback.print_exc()
             image_urls.append(None)
             image_file_ids.append(None)
-            image_bytes_list.append(None)
-
+    
     collection_url = None
     # Create a collection link if requested and we have images
     if create_collection and any(url is not None for url in image_urls):
         try:
-            print("Creating image collection")
             collection_url = create_image_collection(image_urls, "Generated Images Collection")
-            print(f"Collection created with URL: {collection_url}")
         except Exception as collection_error:
-            error_msg = f"Error creating collection: {str(collection_error)}"
-            print(error_msg)
-            error_messages.append(error_msg)
-
+            print(f"Error creating collection: {str(collection_error)}")
+            import traceback
+            traceback.print_exc()
+    
     # Return results
     results = []
     for i, prompt in enumerate(prompts):
         if i < len(image_urls) and image_urls[i]:
             file_id = image_file_ids[i] if i < len(image_file_ids) else None
-            image_bytes = image_bytes_list[i] if i < len(image_bytes_list) else None
-
             results.append({
                 "prompt": prompt,
                 "image_url": image_urls[i],
-                "image_bytes": image_bytes,
                 "file_id": file_id,
                 "collection_url": collection_url,
                 "status": "success"
             })
-            print(f"Successfully generated image for prompt {i+1}")
         else:
             results.append({
                 "prompt": prompt,
                 "status": "error",
-                "message": error_messages[i] if i < len(error_messages) else "Failed to generate or upload image"
+                "message": "Failed to generate or upload image"
             })
-            print(f"Failed to generate image for prompt {i+1}")
-
+    
     return results
 
-# Function to create image collection
+# ==== Function to create image collection ====
 def create_image_collection(image_urls, title="Generated Images Collection"):
     """Create a collection link with Creatify API"""
     # Filter out any None values
@@ -798,15 +798,18 @@ def create_image_collection(image_urls, title="Generated Images Collection"):
             try:
                 json_response = response.json()
                 if 'url' in json_response:
+                    print(f"Created collection link: {json_response['url']}")
                     return json_response['url']
             except ValueError:
                 pass
         
+        print(f"Failed to create collection link. Status code: {response.status_code}")
         return None
     
     except Exception as e:
-        st.error(f"Error creating collection link: {e}")
+        print(f"Error creating collection link: {e}")
         return None
+
 
 # ====================== HELPER FUNCTIONS ======================
 
