@@ -1728,7 +1728,7 @@ Remember that brief user responses like "ok" or "sounds good" are often acknowle
             )
 
         if st.button("Show Chat Session JSON"):
-        st.json(st.session_state.messages)
+            st.json(st.session_state.messages)
 
         
         # Periodically save learning data (every 5 messages)
