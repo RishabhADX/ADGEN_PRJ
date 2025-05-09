@@ -26,8 +26,7 @@ os.environ["GROQ_API_KEY"] = "gsk_jpJO5BWMqSTB0utPZDeLWGdyb3FYgAtGpXltKUu0BYYp8q
 client = Groq()
 
 # Initialize the Google Gemini client
-genai.configure(api_key="AIzaSyBLzfjImenFp60acvXgKygaEDKGqKfHyKI")
-gemini_client = genai.GenerativeModel("gemini-2.0-flash-exp-image-generation")
+gemini_client = genai.Client(api_key="AIzaSyBLzfjImenFp60acvXgKygaEDKGqKfHyKI")
 
 # Initialize the ImageKit client
 imagekit = ImageKit(
@@ -786,7 +785,7 @@ def generate_images(prompts, create_collection=True):
         
         try:
             # Generate image using Gemini
-            response = gemini_client.generate_content(
+            response = gemini_client.models.generate_content(
                 model="gemini-2.0-flash-exp-image-generation",
                 contents=prompt
             )
