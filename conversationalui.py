@@ -634,9 +634,7 @@ def generate_images(prompts, create_collection=True):
     image_urls = []
     image_file_ids = []
     image_bytes_list = []
-
-    # Add debug print
-    print(f"Generating images for {len(prompts)} prompts")
+    error_messages = []
 
     # Process each prompt
     for i, prompt in enumerate(prompts):
@@ -652,13 +650,13 @@ def generate_images(prompts, create_collection=True):
                 )
             )
 
-            # Add debug print for response
             print(f"Received response for prompt {i+1}")
-            print(f"Response candidates: {len(response.candidates)}")
 
             # Check if we have a valid response
             if not response.candidates or not response.candidates[0].content.parts:
-                print(f"No valid content in response for prompt {i+1}")
+                error_msg = f"No valid content in response for prompt {i+1}"
+                print(error_msg)
+                error_messages.append(error_msg)
                 image_urls.append(None)
                 image_file_ids.append(None)
                 image_bytes_list.append(None)
@@ -687,18 +685,24 @@ def generate_images(prompts, create_collection=True):
                         image_urls.append(upload.url)
                         image_file_ids.append(upload.file_id)
                     except Exception as upload_error:
-                        print(f"Error uploading to ImageKit for prompt {i+1}: {str(upload_error)}")
+                        error_msg = f"Error uploading to ImageKit for prompt {i+1}: {str(upload_error)}"
+                        print(error_msg)
+                        error_messages.append(error_msg)
                         image_urls.append(None)
                         image_file_ids.append(None)
 
             if not image_found:
-                print(f"No image found in response for prompt {i+1}")
+                error_msg = f"No image found in response for prompt {i+1}"
+                print(error_msg)
+                error_messages.append(error_msg)
                 image_urls.append(None)
                 image_file_ids.append(None)
                 image_bytes_list.append(None)
 
         except Exception as general_error:
-            print(f"Error in image generation for prompt {i+1}: {str(general_error)}")
+            error_msg = f"Error in image generation for prompt {i+1}: {str(general_error)}"
+            print(error_msg)
+            error_messages.append(error_msg)
             image_urls.append(None)
             image_file_ids.append(None)
             image_bytes_list.append(None)
@@ -711,7 +715,9 @@ def generate_images(prompts, create_collection=True):
             collection_url = create_image_collection(image_urls, "Generated Images Collection")
             print(f"Collection created with URL: {collection_url}")
         except Exception as collection_error:
-            print(f"Error creating collection: {str(collection_error)}")
+            error_msg = f"Error creating collection: {str(collection_error)}"
+            print(error_msg)
+            error_messages.append(error_msg)
 
     # Return results
     results = []
@@ -733,7 +739,7 @@ def generate_images(prompts, create_collection=True):
             results.append({
                 "prompt": prompt,
                 "status": "error",
-                "message": "Failed to generate or upload image"
+                "message": error_messages[i] if i < len(error_messages) else "Failed to generate or upload image"
             })
             print(f"Failed to generate image for prompt {i+1}")
 
