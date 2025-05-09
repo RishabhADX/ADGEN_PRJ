@@ -1063,7 +1063,7 @@ else:
     st.subheader(f"Hello, {st.session_state.username}!")
 
     #show json
-    if st.button("Show Chat Session JSON"):
+    if st.button("Show Chat Session JSON2"):
         st.json(st.session_state.messages)
     
     # Initialize system prompt
