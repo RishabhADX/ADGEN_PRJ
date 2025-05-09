@@ -1065,7 +1065,23 @@ else:
     #show json
     if st.button("Show Chat Session JSON2"):
         st.json(st.session_state.messages)
+        
+    # Add this in your main app UI section, after the authentication check
+    if st.session_state.user_learning:
+        if st.button("Show User Preferences JSON"):
+            # Get the user preferences data
+            preferences = st.session_state.user_learning.preferences
+            conversation_learning = st.session_state.user_learning.conversation_learning
     
+            # Combine the data into a single dictionary
+            user_data = {
+                "preferences": preferences,
+                "conversation_learning": conversation_learning
+            }
+    
+            # Display the JSON data
+            st.json(user_data)
+
     # Initialize system prompt
     if "system_prompt" not in st.session_state:
         base_system_prompt = """
@@ -1169,7 +1185,23 @@ Remember that brief user responses like "ok" or "sounds good" are often acknowle
         #show json
         if st.button("Show Chat Session JSON"):
             st.json(st.session_state.messages)
-    
+
+        # Add this in your main app UI section, after the authentication check
+        if st.session_state.user_learning:
+            if st.button("Show User Preferences JSON"):
+                # Get the user preferences data
+                preferences = st.session_state.user_learning.preferences
+                conversation_learning = st.session_state.user_learning.conversation_learning
+        
+                # Combine the data into a single dictionary
+                user_data = {
+                    "preferences": preferences,
+                    "conversation_learning": conversation_learning
+                }
+        
+                # Display the JSON data
+                st.json(user_data)
+
     # Display chat history
     for message in st.session_state.messages:
         if message["role"] != "system" and message["role"] != "function":
