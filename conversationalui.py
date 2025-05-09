@@ -972,7 +972,7 @@ def process_message(message, system_prompt, messages, elevenlabs_client, selecte
         
         # Call Groq API
         chat_completion = client.chat.completions.create(
-            model="llama3-70b-8192",
+            model=""deepseek-r1-distill-llama-70b",
             messages=messages_to_send,
             temperature=0.7,
             max_tokens=1024,
