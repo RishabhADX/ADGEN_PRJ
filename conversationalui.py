@@ -763,8 +763,6 @@ def generate_images(prompts, create_collection=True):
 
     return results
 
-
-
 # Function to create image collection
 def create_image_collection(image_urls, title="Generated Images Collection"):
     """Create a collection link with Creatify API"""
