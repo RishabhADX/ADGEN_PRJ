@@ -1,4 +1,5 @@
-google-genaipillow
+google-genai
+pillow
 imagekitio
 requests
 elevenlabs
