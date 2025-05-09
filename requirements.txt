@@ -1,5 +1,6 @@
-elevenlabs
-crewai
+google-generativeai
+pillow
 imagekitio
-google-genai
-langchain_groq
+requests
+elevenlabs
+groq
