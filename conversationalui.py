@@ -626,18 +626,23 @@ def generate_images(prompts, create_collection=True):
     """Generate images using Google Gemini and upload to ImageKit"""
     gemini_client = clients["gemini"]
     imagekit = clients["imagekit"]
-    
+
     if isinstance(prompts, str):
         prompts = [prompts]  # Convert single prompt to list
-    
+
     # Create lists to store image information
     image_urls = []
     image_file_ids = []
     image_bytes_list = []
-    
+
+    # Add debug print
+    print(f"Generating images for {len(prompts)} prompts")
+
     # Process each prompt
     for i, prompt in enumerate(prompts):
         try:
+            print(f"Processing prompt {i+1}/{len(prompts)}: {prompt[:50]}...")
+
             # Generate content using Gemini API
             response = gemini_client.models.generate_content(
                 model="gemini-2.0-flash-exp-image-generation",
@@ -646,64 +651,75 @@ def generate_images(prompts, create_collection=True):
                     response_modalities=['TEXT', 'IMAGE']
                 )
             )
-            
+
+            # Add debug print for response
+            print(f"Received response for prompt {i+1}")
+            print(f"Response candidates: {len(response.candidates)}")
+
             # Check if we have a valid response
             if not response.candidates or not response.candidates[0].content.parts:
+                print(f"No valid content in response for prompt {i+1}")
                 image_urls.append(None)
                 image_file_ids.append(None)
                 image_bytes_list.append(None)
                 continue
-            
+
             # Process results
             image_found = False
             for part in response.candidates[0].content.parts:
                 if getattr(part, "inline_data", None):
                     image_found = True
-                    
+                    print(f"Found image data in response for prompt {i+1}")
+
                     # Get image data
                     image_data = BytesIO(part.inline_data.data)
                     image_bytes_list.append(image_data.getvalue())
-                    
+
                     # Upload to ImageKit
                     try:
+                        print(f"Uploading image {i+1} to ImageKit")
                         upload = imagekit.upload(
                             file=image_data,
                             file_name=f"image-{uuid.uuid4().hex[:8]}.png"
                         )
-                        
+
+                        print(f"Successfully uploaded image {i+1}")
                         image_urls.append(upload.url)
                         image_file_ids.append(upload.file_id)
                     except Exception as upload_error:
-                        st.error(f"Error uploading to ImageKit: {str(upload_error)}")
+                        print(f"Error uploading to ImageKit for prompt {i+1}: {str(upload_error)}")
                         image_urls.append(None)
                         image_file_ids.append(None)
-            
+
             if not image_found:
+                print(f"No image found in response for prompt {i+1}")
                 image_urls.append(None)
                 image_file_ids.append(None)
                 image_bytes_list.append(None)
-                
+
         except Exception as general_error:
-            st.error(f"Error in image generation: {str(general_error)}")
+            print(f"Error in image generation for prompt {i+1}: {str(general_error)}")
             image_urls.append(None)
             image_file_ids.append(None)
             image_bytes_list.append(None)
-    
+
     collection_url = None
     # Create a collection link if requested and we have images
     if create_collection and any(url is not None for url in image_urls):
         try:
+            print("Creating image collection")
             collection_url = create_image_collection(image_urls, "Generated Images Collection")
+            print(f"Collection created with URL: {collection_url}")
         except Exception as collection_error:
-            st.error(f"Error creating collection: {str(collection_error)}")
-    
+            print(f"Error creating collection: {str(collection_error)}")
+
     # Return results
     results = []
     for i, prompt in enumerate(prompts):
         if i < len(image_urls) and image_urls[i]:
             file_id = image_file_ids[i] if i < len(image_file_ids) else None
             image_bytes = image_bytes_list[i] if i < len(image_bytes_list) else None
-            
+
             results.append({
                 "prompt": prompt,
                 "image_url": image_urls[i],
@@ -712,14 +728,17 @@ def generate_images(prompts, create_collection=True):
                 "collection_url": collection_url,
                 "status": "success"
             })
+            print(f"Successfully generated image for prompt {i+1}")
         else:
             results.append({
                 "prompt": prompt,
                 "status": "error",
                 "message": "Failed to generate or upload image"
             })
-    
+            print(f"Failed to generate image for prompt {i+1}")
+
     return results
+
 
 # Function to create image collection
 def create_image_collection(image_urls, title="Generated Images Collection"):
