@@ -1166,7 +1166,11 @@ Remember that brief user responses like "ok" or "sounds good" are often acknowle
     for message in st.session_state.messages:
         if message["role"] != "system" and message["role"] != "function":
             display_message(message["role"], message["content"])
-    
+            
+    #show json
+    if st.button("Show Chat Session JSON"):
+        st.json(st.session_state.messages)
+
     # Check for and process pending feedback
     if st.session_state.pending_feedback["needed"]:
         with st.container():
@@ -1757,5 +1761,3 @@ Remember that brief user responses like "ok" or "sounds good" are often acknowle
         if len(st.session_state.messages) % 5 == 0:
             st.session_state.user_learning.save_data()
             
-        if st.button("Show Chat Session JSON"):
-            st.json(st.session_state.messages)
