@@ -620,8 +620,8 @@ def generate_elevenlabs_audio(voice_id, text, voice_settings=None):
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
-
-# Function to generate images
+        
+# image generation
 def generate_images(prompts, create_collection=True):
     """Generate images using Google Gemini and upload to ImageKit"""
     gemini_client = clients["gemini"]
@@ -642,15 +642,23 @@ def generate_images(prompts, create_collection=True):
             print(f"Processing prompt {i+1}/{len(prompts)}: {prompt[:50]}...")
 
             # Generate content using Gemini API
-            response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash-exp-image-generation",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=['TEXT', 'IMAGE']
+            try:
+                response = gemini_client.models.generate_content(
+                    model="gemini-2.0-flash-exp-image-generation",
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_modalities=['TEXT', 'IMAGE']
+                    )
                 )
-            )
-
-            print(f"Received response for prompt {i+1}")
+                print(f"Successfully called Gemini API for prompt {i+1}")
+            except Exception as api_error:
+                print(f"Gemini API error for prompt {i+1}: {str(api_error)}")
+                error_msg = f"Gemini API error for prompt {i+1}: {str(api_error)}"
+                error_messages.append(error_msg)
+                image_urls.append(None)
+                image_file_ids.append(None)
+                image_bytes_list.append(None)
+                continue
 
             # Check if we have a valid response
             if not response.candidates or not response.candidates[0].content.parts:
@@ -670,18 +678,28 @@ def generate_images(prompts, create_collection=True):
                     print(f"Found image data in response for prompt {i+1}")
 
                     # Get image data
-                    image_data = BytesIO(part.inline_data.data)
-                    image_bytes_list.append(image_data.getvalue())
+                    try:
+                        image_data = BytesIO(part.inline_data.data)
+                        image_bytes_list.append(image_data.getvalue())
+                        print(f"Successfully extracted image data for prompt {i+1}")
+                    except Exception as image_data_error:
+                        error_msg = f"Error extracting image data for prompt {i+1}: {str(image_data_error)}"
+                        print(error_msg)
+                        error_messages.append(error_msg)
+                        image_urls.append(None)
+                        image_file_ids.append(None)
+                        image_bytes_list.append(None)
+                        continue
 
                     # Upload to ImageKit
                     try:
                         print(f"Uploading image {i+1} to ImageKit")
                         upload = imagekit.upload(
-                            file=image_data,
+                            file=BytesIO(part.inline_data.data),
                             file_name=f"image-{uuid.uuid4().hex[:8]}.png"
                         )
 
-                        print(f"Successfully uploaded image {i+1}")
+                        print(f"Successfully uploaded image {i+1} to ImageKit")
                         image_urls.append(upload.url)
                         image_file_ids.append(upload.file_id)
                     except Exception as upload_error:
@@ -744,6 +762,7 @@ def generate_images(prompts, create_collection=True):
             print(f"Failed to generate image for prompt {i+1}")
 
     return results
+
 
 
 # Function to create image collection
