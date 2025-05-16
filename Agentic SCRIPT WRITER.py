@@ -227,9 +227,29 @@ def search_scriptwriting_concepts(query:str)->str:
         return error_message
 
 # Register Tool
-register_function(search_scriptwriting_concepts, caller=ProducerAgent, executor=ProducerAgent)
-register_function(search_scriptwriting_concepts, caller=ResearcherAgent, executor=ResearcherAgent)
-register_function(search_scriptwriting_concepts, caller=CopywriterAgent, executor=CopywriterAgent)
+register_function(
+    search_scriptwriting_concepts,
+    caller=ProducerAgent,
+    executor=ProducerAgent,
+    name="search_scriptwriting_concepts",  # By default, the function name is used as the tool name.
+    description="A tool to fetch book knowledge from pinecone vector db",
+)
+
+register_function(
+    search_scriptwriting_concepts,
+    caller=ResearcherAgent,
+    executor= ResearcherAgent,
+    name="search_scriptwriting_concepts",  # By default, the function name is used as the tool name.
+    description="A tool to fetch book knowledge from pinecone vector db",
+)
+
+register_function(
+    search_scriptwriting_concepts,
+    caller=CopywriterAgent,
+    executor=CopywriterAgent,
+    name="search_scriptwriting_concepts",  # By default, the function name is used as the tool name.
+    description="A tool to fetch book knowledge from pinecone vector db",
+)
 
 # Group Chat Manager
 group_chat = GroupChat(
