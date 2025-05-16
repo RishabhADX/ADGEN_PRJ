@@ -185,7 +185,7 @@ IMPORTANT:
             allowed_or_disallowed_speaker_transitions=allowed_transitions,
             speaker_transitions_type="allowed",
             messages=[],
-            max_round=3,  # Limited rounds per user input
+            max_round=100,  # Limited rounds per user input
             send_introductions=False,
         )
         
