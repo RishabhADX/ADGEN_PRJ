@@ -4,7 +4,8 @@ st.set_page_config(page_title="Ad Scriptwriter Bot", layout="wide")
 # Suppress console output
 import sys
 import os
-sys.stdout = open(os.devnull, 'w')  # 👈 This line silences all print() output
+import builtins
+builtins.print = lambda *args, **kwargs: None
 
 from autogen import (
     AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager, register_function
