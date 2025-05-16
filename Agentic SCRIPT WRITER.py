@@ -14,42 +14,39 @@ config_list = [{
     "api_type": "groq",
 }]
 
-# Custom UserProxyAgent for Streamlit with better isolation from console
-class StreamlitUserProxyAgent(UserProxyAgent):
-    def get_human_input(self, prompt: str) -> str:
-        # Completely ignore the console prompt
-        if prompt:
-            # Store the prompt from agents in session state
-            if 'pending_agent_messages' not in st.session_state:
-                st.session_state.pending_agent_messages = []
-            st.session_state.pending_agent_messages.append(prompt)
-        
-        # Only return input if we have it in session state
-        if 'user_input' in st.session_state and st.session_state.user_input:
-            user_input = st.session_state.user_input
-            # Clear the input after consuming it
-            st.session_state.user_input = ""
-            return user_input
-        
-        # Signal to wait for user input by raising an exception
-        # This prevents AutoGen from proceeding with default input methods
-        raise InterruptedError("Waiting for Streamlit user input")
+# Conversation state tracker
+class ConversationState:
+    def __init__(self):
+        self.messages = []
+        self.agent_messages = []
     
-    def receive(self, message, sender, silent=False):
-        # Store the message in session state for display
-        if sender.name != self.name:  # Don't record echo of our own messages
-            st.session_state.messages.append({"role": sender.name, "content": message["content"]})
-        return super().receive(message, sender, silent)
+    def add_user_message(self, content):
+        self.messages.append({"role": "User", "content": content})
+    
+    def add_agent_message(self, agent_name, content):
+        self.messages.append({"role": agent_name, "content": content})
+        self.agent_messages.append({"name": agent_name, "content": content})
+    
+    def get_messages(self):
+        return self.messages
+    
+    def get_agent_messages(self):
+        result = self.agent_messages.copy()
+        self.agent_messages = []  # Clear after getting
+        return result
 
 # Initialize session state
-if 'initialized' not in st.session_state:
-    st.session_state.initialized = False
-    st.session_state.messages = []
+if 'conversation_state' not in st.session_state:
+    st.session_state.conversation_state = ConversationState()
+
+if 'chat_initialized' not in st.session_state:
     st.session_state.chat_initialized = False
+
+if 'session_id' not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
+
+if 'termination_msg_received' not in st.session_state:
     st.session_state.termination_msg_received = False
-    st.session_state.conversation_started = False
-    st.session_state.waiting_for_input = False
 
 # UI Layout
 st.title("Ad Script Generator")
@@ -71,14 +68,12 @@ with st.sidebar:
         if st.button("Start New Chat"):
             # Reset session
             for key in list(st.session_state.keys()):
-                if key not in ['user_name', 'initialized']:
+                if key not in ['user_name']:
                     del st.session_state[key]
-            st.session_state.messages = []
+            st.session_state.conversation_state = ConversationState()
             st.session_state.chat_initialized = False
             st.session_state.session_id = str(uuid.uuid4())
             st.session_state.termination_msg_received = False
-            st.session_state.conversation_started = False
-            st.session_state.waiting_for_input = False
             st.rerun()
 
 # Main chat area
@@ -86,7 +81,7 @@ if 'user_name' in st.session_state:
     # Display chat messages
     chat_container = st.container()
     with chat_container:
-        for message in st.session_state.messages:
+        for message in st.session_state.conversation_state.get_messages():
             role = message["role"]
             content = message["content"]
             
@@ -103,10 +98,10 @@ if 'user_name' in st.session_state:
     
     # Initialize agents if not already done
     if not st.session_state.chat_initialized:
-        # Create agents
-        client = StreamlitUserProxyAgent(
+        # Create agents - NO HUMAN INPUT MODE
+        client = UserProxyAgent(
             name="User",
-            human_input_mode="ALWAYS",
+            human_input_mode="NEVER",  # Critical change from ALWAYS to NEVER
             max_consecutive_auto_reply=0,
             code_execution_config=False,
             system_message="You are a human ad script writer collaborating with agents to write."
@@ -196,7 +191,7 @@ IMPORTANT:
             allowed_or_disallowed_speaker_transitions=allowed_transitions,
             speaker_transitions_type="allowed",
             messages=[],
-            max_round=1,  # CRUCIAL: Only 1 round per user input
+            max_round=3,  # Allow up to 3 agent responses per step
             send_introductions=False,
         )
         
@@ -220,15 +215,12 @@ IMPORTANT:
         st.session_state.client = client
         st.session_state.group_chat_manager = group_chat_manager
         st.session_state.chat_initialized = True
-        st.session_state.waiting_for_input = False
         
-        # Add initial greeting message manually
-        st.session_state.messages.append({
-            "role": "CreativeDirector", 
-            "content": f"CreativeDirector: Hello, {st.session_state.user_name}! Welcome to our ad campaign creation session. What type of ad would you like to create today?"
-        })
+        # Add initial welcome message from CreativeDirector
+        welcome_msg = f"CreativeDirector: Hello, {st.session_state.user_name}! Welcome to our ad campaign creation session. What type of ad would you like to create today?"
+        st.session_state.conversation_state.add_agent_message("CreativeDirector", welcome_msg)
         
-        # No automatic chat initiation!
+        # Force a rerun to update the UI
         st.rerun()
     
     # User input area (disabled if termination message received)
@@ -238,29 +230,33 @@ IMPORTANT:
     else:
         user_input = st.chat_input("Type your message here...")
         
-        if user_input and not st.session_state.waiting_for_input:
-            # Add user message to display
-            st.session_state.messages.append({"role": "User", "content": user_input})
+        if user_input:
+            # Add user message to conversation state
+            st.session_state.conversation_state.add_user_message(user_input)
             
-            # Set input for agent to consume
-            st.session_state.user_input = user_input
-            st.session_state.waiting_for_input = True
+            # Get manager and groupchat
+            manager = st.session_state.group_chat_manager
+            groupchat = manager.groupchat
             
-            # Process the message
-            try:
-                st.session_state.client.initiate_chat(
-                    st.session_state.group_chat_manager,
-                    message=user_input,
-                    clear_history=False
+            # CRITICAL: Instead of initiate_chat, manually add the message to the groupchat
+            groupchat.messages.append({"role": "user", "content": user_input, "name": "User"})
+            
+            # Process 3 turns of the conversation at most
+            for _ in range(3):
+                # Use step method to advance the conversation by one step
+                message = manager.step()
+                if message is None:
+                    break
+                
+                # Add the response to our conversation state
+                st.session_state.conversation_state.add_agent_message(
+                    message.get("name", "Unknown"),
+                    message.get("content", "")
                 )
-            except InterruptedError:
-                # This is expected - we're stopping to get user input
-                pass
-            except Exception as e:
-                st.error(f"Error processing message: {str(e)}")
-            
-            # Reset waiting flag
-            st.session_state.waiting_for_input = False
+                
+                # Check for termination
+                if is_termination_msg(message):
+                    break
             
             # Force a rerun to update the UI
             st.rerun()
