@@ -17,7 +17,7 @@ config_list = [
         # Let's choose the Llama 3 model
         "model": "llama3-8b-8192",
         # Put your Groq API key here or put it into the GROQ_API_KEY environment variable.
-        "api_key": os.environ.get("GROQ_API_KEY"),
+        "api_key": "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",
         # We specify the API Type as 'groq' so it uses the Groq client class
         "api_type": "groq",
     }
