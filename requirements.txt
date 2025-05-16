@@ -2,3 +2,4 @@ streamlit
 autogen 
 pinecone
 openai
+groq
