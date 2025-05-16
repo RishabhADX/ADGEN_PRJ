@@ -6,7 +6,7 @@ from autogen import (
 import os
 
 # -- ENVIRONMENT CONFIGURATION --
-os.environ["OPENAI_API_KEY"] ="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"
+os.environ["OPENAI_API_KEY"] = "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"
 
 # -- SETUP LLM CONFIG --
 llm_config = {
