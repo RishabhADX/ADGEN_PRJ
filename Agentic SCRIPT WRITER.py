@@ -89,7 +89,8 @@ if 'user_name' in st.session_state:
                 with st.chat_message("user"):
                     st.write(content)
             else:
-                with st.chat_message("assistant", avatar=role[0]):
+                # Fix: Use "assistant" instead of first letter of role name for avatar
+                with st.chat_message("assistant"):
                     st.write(f"**{role}**: {content}")
     
     # Function to check if a message contains the termination phrase
