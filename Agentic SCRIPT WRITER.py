@@ -308,7 +308,7 @@ if prompt:
         if isinstance(reply, list):  
             # If the reply is a list of responses from multiple agents
             for r in reply:
-                st.session_state(reply)
+                st.chat_message(reply['name']).markdown(reply['content'])
                 st.session_state.chat_history.append((r['name'], r['content']))
                 st.chat_message(r['name']).markdown(r['content'])
         else:  # Single reply from one agent
