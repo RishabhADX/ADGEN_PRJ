@@ -276,7 +276,7 @@ manager = GroupChatManager(
 st.session_state.manager = manager
 st.session_state.user_agent = client
 
-# Display chat history
+# Display chat history (ensure chat history is shown in the UI)
 for speaker, msg in st.session_state.chat_history:
     st.chat_message(speaker).markdown(msg)
 
@@ -284,13 +284,19 @@ for speaker, msg in st.session_state.chat_history:
 prompt = st.chat_input("Say something to start...")
 
 if prompt:
+    # Add the user's message to the chat history
     st.session_state.chat_history.append(("User", prompt))
+
+    # Show a spinner while waiting for the agent to respond
     with st.spinner("Thinking..."):
+        # Get a reply from the agent(s)
         reply = client.initiate_chat(manager, message=prompt)
-        if isinstance(reply, list):  # multiple agent replies
+        
+        # Check if multiple agents have responded
+        if isinstance(reply, list):  
             for r in reply:
                 st.session_state.chat_history.append((r['name'], r['content']))
                 st.chat_message(r['name']).markdown(r['content'])
-        else:  # single reply
+        else:  # Single reply from one agent
             st.session_state.chat_history.append((reply['name'], reply['content']))
             st.chat_message(reply['name']).markdown(reply['content'])
