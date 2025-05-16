@@ -2,6 +2,7 @@ import streamlit as st
 import os
 from autogen import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
 import uuid
+import time
 
 # Set page config
 st.set_page_config(page_title="Ad Script Generator", layout="wide")
@@ -13,34 +14,42 @@ config_list = [{
     "api_type": "groq",
 }]
 
-# Custom UserProxyAgent for Streamlit
+# Custom UserProxyAgent for Streamlit with better isolation from console
 class StreamlitUserProxyAgent(UserProxyAgent):
     def get_human_input(self, prompt: str) -> str:
-        # Override to get input from Streamlit instead of console
+        # Completely ignore the console prompt
+        if prompt:
+            # Store the prompt from agents in session state
+            if 'pending_agent_messages' not in st.session_state:
+                st.session_state.pending_agent_messages = []
+            st.session_state.pending_agent_messages.append(prompt)
+        
+        # Only return input if we have it in session state
         if 'user_input' in st.session_state and st.session_state.user_input:
             user_input = st.session_state.user_input
             # Clear the input after consuming it
             st.session_state.user_input = ""
             return user_input
-        return ""
+        
+        # Signal to wait for user input by raising an exception
+        # This prevents AutoGen from proceeding with default input methods
+        raise InterruptedError("Waiting for Streamlit user input")
     
     def receive(self, message, sender, silent=False):
         # Store the message in session state for display
-        st.session_state.messages.append({"role": sender.name, "content": message["content"]})
+        if sender.name != self.name:  # Don't record echo of our own messages
+            st.session_state.messages.append({"role": sender.name, "content": message["content"]})
         return super().receive(message, sender, silent)
 
 # Initialize session state
-if 'messages' not in st.session_state:
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = False
     st.session_state.messages = []
-
-if 'chat_initialized' not in st.session_state:
     st.session_state.chat_initialized = False
-
-if 'session_id' not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
-
-if 'termination_msg_received' not in st.session_state:
     st.session_state.termination_msg_received = False
+    st.session_state.conversation_started = False
+    st.session_state.waiting_for_input = False
 
 # UI Layout
 st.title("Ad Script Generator")
@@ -62,12 +71,14 @@ with st.sidebar:
         if st.button("Start New Chat"):
             # Reset session
             for key in list(st.session_state.keys()):
-                if key not in ['user_name']:
+                if key not in ['user_name', 'initialized']:
                     del st.session_state[key]
             st.session_state.messages = []
             st.session_state.chat_initialized = False
             st.session_state.session_id = str(uuid.uuid4())
             st.session_state.termination_msg_received = False
+            st.session_state.conversation_started = False
+            st.session_state.waiting_for_input = False
             st.rerun()
 
 # Main chat area
@@ -185,7 +196,7 @@ IMPORTANT:
             allowed_or_disallowed_speaker_transitions=allowed_transitions,
             speaker_transitions_type="allowed",
             messages=[],
-            max_round=3,  # Limited rounds per user input
+            max_round=1,  # CRUCIAL: Only 1 round per user input
             send_introductions=False,
         )
         
@@ -209,19 +220,15 @@ IMPORTANT:
         st.session_state.client = client
         st.session_state.group_chat_manager = group_chat_manager
         st.session_state.chat_initialized = True
+        st.session_state.waiting_for_input = False
         
-        # Start the conversation
-        st.session_state.user_input = "hi"  # Initial message to start the conversation
-        try:
-            client.initiate_chat(
-                group_chat_manager,
-                message="hi",
-                clear_history=False
-            )
-        except Exception as e:
-            st.error(f"Error initializing chat: {str(e)}")
+        # Add initial greeting message manually
+        st.session_state.messages.append({
+            "role": "CreativeDirector", 
+            "content": f"CreativeDirector: Hello, {st.session_state.user_name}! Welcome to our ad campaign creation session. What type of ad would you like to create today?"
+        })
         
-        # Force a rerun to update the UI
+        # No automatic chat initiation!
         st.rerun()
     
     # User input area (disabled if termination message received)
@@ -231,12 +238,13 @@ IMPORTANT:
     else:
         user_input = st.chat_input("Type your message here...")
         
-        if user_input:
+        if user_input and not st.session_state.waiting_for_input:
             # Add user message to display
             st.session_state.messages.append({"role": "User", "content": user_input})
             
             # Set input for agent to consume
             st.session_state.user_input = user_input
+            st.session_state.waiting_for_input = True
             
             # Process the message
             try:
@@ -245,8 +253,14 @@ IMPORTANT:
                     message=user_input,
                     clear_history=False
                 )
+            except InterruptedError:
+                # This is expected - we're stopping to get user input
+                pass
             except Exception as e:
                 st.error(f"Error processing message: {str(e)}")
+            
+            # Reset waiting flag
+            st.session_state.waiting_for_input = False
             
             # Force a rerun to update the UI
             st.rerun()
