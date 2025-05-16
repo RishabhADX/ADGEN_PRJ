@@ -8,15 +8,20 @@ import os
 from autogen import (
     AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager, register_function
 )
-import os
-
-# -- ENVIRONMENT CONFIGURATION --
-os.environ["OPENAI_API_KEY"] = "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"
 
 # -- SETUP LLM CONFIG --
-llm_config = {
-    "config_list": [{"model": "gpt-4.1-nano"}]
-}
+import os
+
+config_list = [
+    {
+        # Let's choose the Llama 3 model
+        "model": "llama3-8b-8192",
+        # Put your Groq API key here or put it into the GROQ_API_KEY environment variable.
+        "api_key": os.environ.get("GROQ_API_KEY"),
+        # We specify the API Type as 'groq' so it uses the Groq client class
+        "api_type": "groq",
+    }
+]
 name = st.text_input("Enter your name")
 
 # -- USER INTERFACE --
