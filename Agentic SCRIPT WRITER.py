@@ -4,8 +4,6 @@ st.set_page_config(page_title="Ad Scriptwriter Bot", layout="wide")
 # Suppress console output
 import sys
 import os
-import builtins
-builtins.print = lambda *args, **kwargs: None
 
 from autogen import (
     AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager, register_function
@@ -290,6 +288,8 @@ for speaker, msg in st.session_state.chat_history:
 # Chat Input
 prompt = st.chat_input("Say something to start...")
 
+# Replace the existing response handling with the following:
+
 if prompt:
     # Add the user's message to the chat history
     st.session_state.chat_history.append(("User", prompt))
@@ -298,12 +298,16 @@ if prompt:
     with st.spinner("Thinking..."):
         # Get a reply from the agent(s)
         reply = client.initiate_chat(manager, message=prompt)
-        
-        # Check if multiple agents have responded
+
+        # Ensure that the reply is being returned correctly
         if isinstance(reply, list):  
+            # If the reply is a list of responses from multiple agents
             for r in reply:
                 st.session_state.chat_history.append((r['name'], r['content']))
                 st.chat_message(r['name']).markdown(r['content'])
         else:  # Single reply from one agent
             st.session_state.chat_history.append((reply['name'], reply['content']))
             st.chat_message(reply['name']).markdown(reply['content'])
+        
+        # Print the response in the console (only for debugging purposes, remove if unnecessary)
+        # print(reply)
