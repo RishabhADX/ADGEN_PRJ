@@ -1,7 +1,4 @@
-google-genai
-pillow
-imagekitio
-requests
-elevenlabs
-groq
-streamlit
+streamlit 
+autogen 
+pinecone
+openai
