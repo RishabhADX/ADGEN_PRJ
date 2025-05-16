@@ -29,14 +29,18 @@ class StreamlitUserProxyAgent(UserProxyAgent):
         # Return empty string if no stored input
         return ""
 
-# Initialize ALL session state variables
-if 'initialized' not in st.session_state:
-    st.session_state.initialized = True
+# Initialize session state
+if 'messages' not in st.session_state:
     st.session_state.messages = []
+
+if 'chat_initialized' not in st.session_state:
     st.session_state.chat_initialized = False
+
+if 'session_id' not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
+
+if 'termination_msg_received' not in st.session_state:
     st.session_state.termination_msg_received = False
-    st.session_state.waiting_for_input = False
 
 # UI Layout
 st.title("Ad Script Generator")
@@ -56,12 +60,14 @@ with st.sidebar:
     else:
         st.success(f"Welcome, {st.session_state.user_name}!")
         if st.button("Start New Chat"):
-            # Reset session but keep initialized flag
+            # Reset session
+            for key in list(st.session_state.keys()):
+                if key not in ['user_name']:
+                    del st.session_state[key]
             st.session_state.messages = []
             st.session_state.chat_initialized = False
             st.session_state.session_id = str(uuid.uuid4())
             st.session_state.termination_msg_received = False
-            st.session_state.waiting_for_input = False
             st.rerun()
 
 # Main chat area
@@ -221,10 +227,7 @@ IMPORTANT:
     else:
         user_input = st.chat_input("Type your message here...")
         
-        if user_input and not st.session_state.waiting_for_input:
-            # Set waiting flag to prevent multiple submissions
-            st.session_state.waiting_for_input = True
-            
+        if user_input:
             # Add user message to display
             st.session_state.messages.append({"role": "User", "content": user_input})
             
@@ -259,9 +262,6 @@ IMPORTANT:
                 
             except Exception as e:
                 st.error(f"Error processing message: {str(e)}")
-            
-            # Reset waiting flag
-            st.session_state.waiting_for_input = False
             
             # Force a rerun to update the UI
             st.rerun()
