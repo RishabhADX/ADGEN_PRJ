@@ -49,14 +49,7 @@ client = UserProxyAgent(
 # Producer agent
 ProducerAgent = AssistantAgent(
     name="ProducerAgent",
-    llm_config={
-        # Let's choose the Llama 3 model
-        "model": "llama3-8b-8192",
-        # Put your Groq API key here or put it into the GROQ_API_KEY environment variable.
-        "api_key": os.environ.get("GROQ_API_KEY"),
-        # We specify the API Type as 'groq' so it uses the Groq client class
-        "api_type": "groq",
-    },
+    llm_config={"config_list": config_list},
     system_message="""You are ProducerAgent, an experienced advertising scriptwriter who channels the mindset of legendary ad creators like David Ogilvy, Gary Halbert, and Eugene Schwartz. You don’t just ask surface-level questions — you dig deep to uncover the emotional hooks, market awareness level, and psychological triggers necessary to write high-converting ad scripts.
 
 When briefed by the CreativeDirector, your role is to speak directly to the client (User) and extract all essential information to prepare for script development. You combine the curiosity of a strategist with the instincts of a top-tier copywriter.
@@ -90,14 +83,7 @@ Once you've collected enough information then only proceed to next step else kee
 # Researcher agent
 ResearcherAgent = AssistantAgent(
     name="ResearcherAgent",
-    llm_config={
-        # Let's choose the Llama 3 model
-        "model": "llama3-8b-8192",
-        # Put your Groq API key here or put it into the GROQ_API_KEY environment variable.
-        "api_key": os.environ.get("GROQ_API_KEY"),
-        # We specify the API Type as 'groq' so it uses the Groq client class
-        "api_type": "groq",
-    },
+   llm_config={"config_list": config_list},
     system_message="""You are ResearcherAgent — a Senior Advertising Strategist trained in behavioral psychology, emotional targeting, and market sophistication theory.
 
 You speak directly to the client or the CreativeDirector only when instructed.
@@ -117,14 +103,7 @@ DO NOT respond or contribute until the CreativeDirector explicitly invites your 
 # Copywriter agent
 CopywriterAgent = AssistantAgent(
     name="CopywriterAgent",
-    llm_config={
-        # Let's choose the Llama 3 model
-        "model": "llama3-8b-8192",
-        # Put your Groq API key here or put it into the GROQ_API_KEY environment variable.
-        "api_key": os.environ.get("GROQ_API_KEY"),
-        # We specify the API Type as 'groq' so it uses the Groq client class
-        "api_type": "groq",
-    },
+    llm_config={"config_list": config_list},
     system_message="""You are CopywriterAgent — an award-winning advertising copywriter channeling the voice of greats like Eugene Schwartz and Gary Halbert.
 
 You speak directly to the client only when activated by the CreativeDirector.
@@ -150,14 +129,7 @@ Wait until the CreativeDirector invites your contribution — do not respond oth
 # Creative Director agent
 CreativeDirector = AssistantAgent(
     name="CreativeDirector",
-    llm_config={
-        # Let's choose the Llama 3 model
-        "model": "llama3-8b-8192",
-        # Put your Groq API key here or put it into the GROQ_API_KEY environment variable.
-        "api_key": os.environ.get("GROQ_API_KEY"),
-        # We specify the API Type as 'groq' so it uses the Groq client class
-        "api_type": "groq",
-    },
+    llm_config={"config_list": config_list},
     system_message=f"""You are the Creative Director coordinating this ad campaign.
 
 Your role is to manage the workflow by explicitly directing ONE agent at a time:
@@ -307,14 +279,7 @@ def is_termination_msg(message):
 
 manager = GroupChatManager(
     groupchat=group_chat,
-    llm_config={
-        # Let's choose the Llama 3 model
-        "model": "llama3-8b-8192",
-        # Put your Groq API key here or put it into the GROQ_API_KEY environment variable.
-        "api_key": os.environ.get("GROQ_API_KEY"),
-        # We specify the API Type as 'groq' so it uses the Groq client class
-        "api_type": "groq",
-    },
+    llm_config={"config_list": config_list},
     is_termination_msg=is_termination_msg
 )
 
