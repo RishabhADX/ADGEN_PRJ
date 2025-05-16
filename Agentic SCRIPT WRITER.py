@@ -1,4 +1,5 @@
 import streamlit as st
+st.set_page_config(page_title="Ad Scriptwriter Bot", layout="wide")
 from autogen import (
     AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager, register_function
 )
@@ -14,7 +15,7 @@ llm_config = {
 name = st.text_input("Enter your name")
 
 # -- USER INTERFACE --
-st.set_page_config(page_title="Ad Scriptwriter Bot", layout="wide")
+
 st.title("🎬 Ad Scriptwriter Multi-Agent Bot")
 
 # -- SESSION STATE FOR CHAT --
