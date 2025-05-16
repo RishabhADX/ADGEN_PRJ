@@ -48,14 +48,26 @@ if 'researcher_agent' not in st.session_state:
     st.session_state.researcher_agent = None
 if 'copywriter_agent' not in st.session_state:
     st.session_state.copywriter_agent = None
+if 'user_input' not in st.session_state:
+    st.session_state.user_input = ""
+if 'processing' not in st.session_state:
+    st.session_state.processing = False
+
+# --- Custom UserProxyAgent for Streamlit ---
+class StreamlitUserProxyAgent(UserProxyAgent):
+    def get_human_input(self, prompt=""):
+        # Override to use stored input from Streamlit
+        user_input = st.session_state.user_input
+        st.session_state.user_input = ""  # Clear input after getting it
+        return user_input
 
 # --- Initialize Agents and Group Chat ---
 def initialize_chat():
     if not st.session_state.chat_initialized:
-        # Create agents
-        user_proxy = UserProxyAgent(
+        # Create a custom UserProxyAgent
+        user_proxy = StreamlitUserProxyAgent(
             name="User",
-            human_input_mode="ALWAYS",  # We'll manage input via Streamlit
+            human_input_mode="ALWAYS",  # We are handling input via the custom method
             code_execution_config=False,
             system_message="You are a human ad script writer collaborating with agents to write."
         )
@@ -141,24 +153,27 @@ for message in st.session_state.chat_history:
         st.write(message["content"])
 
 # User input
-user_prompt = st.chat_input("Type your message here...")
+user_prompt = st.chat_input("Type your message here...", key="user_input_box")
+
 if user_prompt:
+    st.session_state.user_input = user_prompt
     st.session_state.chat_history.append({"role": "user", "content": user_prompt})
     with st.chat_message("user"):
         st.write(user_prompt)
 
-    # Send user message to the group chat manager
-    st.session_state.user_proxy.initiate_chat(
-        st.session_state.group_chat_manager,
-        message=user_prompt,
-        clear_history=False  # Keep the chat history
-    )
+    if not st.session_state.processing:
+        st.session_state.processing = True
+        # Trigger the agent chat in a background task
+        def run_chat():
+            st.session_state.user_proxy.initiate_chat(
+                st.session_state.group_chat_manager,
+                message=st.session_state.user_input,
+                clear_history=False  # Keep the chat history
+            )
+            # Update chat history with new messages
+            for message in st.session_state.group_chat_manager.groupchat.messages[len(st.session_state.chat_history):]:
+                st.session_state.chat_history.append({"role": "assistant", "name": message.get("name", "Agent"), "content": message["content"]})
+            st.session_state.processing = False
+            st.rerun() # Force a rerun to update the UI
 
-    # Display new messages from agents
-    for message in st.session_state.group_chat_manager.groupchat.messages[len(st.session_state.chat_history):]:
-        st.session_state.chat_history.append({"role": "assistant", "name": message.get("name", "Agent"), "content": message["content"]})
-        with st.chat_message("assistant", name=message.get("name")):
-            st.write(message["content"])
-
-    # Force a rerun to update the UI with new messages
-    st.rerun()
+        run_chat()
