@@ -310,4 +310,4 @@ if prompt:
             st.chat_message(reply['name']).markdown(reply['content'])
         
         # Print the response in the console (only for debugging purposes, remove if unnecessary)
-        # print(reply)
+        print(reply)
